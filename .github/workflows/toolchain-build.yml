@@ -237,23 +237,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          REPO="$GITHUB_WORKSPACE"
           rm -rf /tmp/transfer
           mkdir -p /tmp/transfer/payload/logs /tmp/transfer/payload/metadata /tmp/transfer/payload/apks /tmp/transfer/payload/gradle-official /tmp/transfer/sdk
           cp -f sdkmanager-version.txt sdkmanager-install.log sdk-installed.txt gradle-version.txt gradle-checksum.txt gradle-unzip-test.txt \
                 toolchain-manifest.txt static-verify.log gradle-tasks.log gradle-apk-tasks.txt \
                 build-noruntime.log build-noruntime.exit build-full.log build-full.exit \
                 apk-list.txt apk-verify.txt /tmp/transfer/payload/logs/ 2>/dev/null || true
-          cp -f /tmp/gradle-official/gradle-8.14.5-bin.zip /tmp/gradle-official/gradle-8.14.5-bin.zip.sha256 /tmp/transfer/payload/gradle-official/ || true
+          cp -f /tmp/gradle-official/gradle-8.14.5-bin.zip.sha256 /tmp/transfer/payload/gradle-official/ || true
           find app_pojavlauncher/build/outputs -type f -name '*.apk' -exec cp -f --parents {} /tmp/transfer/payload/apks/ \; 2>/dev/null || true
-          tar -czf /tmp/transfer/payload/gradle-dist.tar.gz -C /tmp/gradle-official gradle-8.14.5 gradle-8.14.5-bin.zip gradle-8.14.5-bin.zip.sha256 2>/dev/null || true
+          tar -czf /tmp/transfer/payload/gradle-dist.tar.gz -C /tmp/gradle-official gradle-8.14.5 gradle-8.14.5-bin.zip.sha256 2>/dev/null || true
           tar -czf /tmp/transfer/payload/gradle-home.tar.gz \
             --exclude='./daemon' --exclude='./workers' --exclude='./.tmp' \
             --exclude='./caches/transforms-*' --exclude='./caches/jars-*' \
             -C "$GRADLE_USER_HOME" . 2>/dev/null || true
-          if [ -d /opt/hostedtoolcache/gradle/8.14.5 ]; then
-            tar -czf /tmp/transfer/payload/gradle-toolcache.tar.gz -C /opt/hostedtoolcache gradle/8.14.5 || true
-          fi
-          for d in platforms/android-36 build-tools/36.0.0 ndk/29.0.14206865 cmake/3.22.1 cmdline-tools/latest licenses platform-tools; do
+          for d in platforms/android-36 build-tools/36.0.0 ndk/29.0.14206865 cmake/3.22.1 licenses; do
             if [ -e "$ANDROID_HOME/$d" ]; then
               mkdir -p "/tmp/transfer/sdk/$(dirname "$d")"
               cp -a "$ANDROID_HOME/$d" "/tmp/transfer/sdk/$d"
@@ -287,34 +285,36 @@ jobs:
           {
             echo "archive=transfer.tar.gz"
             echo "archive_sha256=$(awk '{print $1}' transfer.sha256)"
-            echo "part_count=$(ls part_* | wc -l)"
+            echo "part_count=$(ls /tmp/transfer/part_* | wc -l)"
             echo "part_size_bytes=67108864"
             echo "part_pattern=part_%04d"
             echo "parts_sha256=parts.sha256"
             echo "noruntime_exit=$(cat /tmp/transfer/payload/logs/build-noruntime.exit 2>/dev/null || echo missing)"
             echo "full_exit=$(cat /tmp/transfer/payload/logs/build-full.exit 2>/dev/null || echo missing)"
-          } > transfer-manifest.txt
+          } > /tmp/transfer/transfer-manifest.txt
+          cd "$REPO"
           {
             echo "commit-step=package"
             echo "date=$(date -u +%FT%TZ)"
             echo "head=$(git rev-parse HEAD)"
-            echo "part_count=$(ls part_* | wc -l)"
+            echo "part_count=$(ls /tmp/transfer/part_* | wc -l)"
             echo "total_size=$(du -sh /tmp/transfer | awk '{print $1}')"
             git status --short -- toolchain-transfer > /tmp/gitstatus-package.txt || true
             head -40 /tmp/gitstatus-package.txt || true
           } > /tmp/transfer/payload/metadata/package-step.txt
-          mkdir -p toolchain-transfer/logs toolchain-transfer/metadata toolchain-transfer/parts
-          cp -f transfer.sha256 parts.sha256 transfer-manifest.txt toolchain-transfer/metadata/
-          cp -f /tmp/transfer/payload/metadata/* toolchain-transfer/metadata/
-          cp -f /tmp/transfer/payload/logs/* toolchain-transfer/logs/ 2>/dev/null || true
-          cp -f part_* toolchain-transfer/parts/
-          echo "packed $(ls part_* | wc -l) parts, total $(du -sh /tmp/transfer | awk '{print $1}')"
+          mkdir -p "$REPO/toolchain-transfer/logs" "$REPO/toolchain-transfer/metadata" "$REPO/toolchain-transfer/parts"
+          cp -f /tmp/transfer/transfer.sha256 /tmp/transfer/parts.sha256 /tmp/transfer/transfer-manifest.txt "$REPO/toolchain-transfer/metadata/"
+          cp -f /tmp/transfer/payload/metadata/* "$REPO/toolchain-transfer/metadata/"
+          cp -f /tmp/transfer/payload/logs/* "$REPO/toolchain-transfer/logs/" 2>/dev/null || true
+          cp -f /tmp/transfer/part_* "$REPO/toolchain-transfer/parts/"
+          echo "packed $(ls /tmp/transfer/part_* | wc -l) parts, total $(du -sh /tmp/transfer | awk '{print $1}')"
 
       - name: Commit logs and verification metadata to active branch
         if: always()
         shell: bash
         run: |
           set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
           mkdir -p toolchain-transfer/logs toolchain-transfer/metadata toolchain-transfer/parts
           cp -f sdkmanager-version.txt sdkmanager-install.log sdk-installed.txt gradle-version.txt gradle-checksum.txt gradle-unzip-test.txt \
                 toolchain-manifest.txt static-verify.log gradle-tasks.log gradle-apk-tasks.txt \
@@ -344,21 +344,32 @@ jobs:
           echo "local_head_after_log_commit=$(git rev-parse HEAD)"
           git push --porcelain origin HEAD:refs/heads/arena/7535fc36-pojavlauncher
 
-      - name: Commit large toolchain payload to active branch
+      - name: Commit large toolchain payload in bounded batches
         if: always()
         continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p toolchain-transfer/parts
+          cd "$GITHUB_WORKSPACE"
+          shopt -s nullglob
+          parts=(toolchain-transfer/parts/part_*)
+          echo "part_count=${#parts[@]}"
+          if [ "${#parts[@]}" -eq 0 ]; then
+            echo "no payload parts to publish"
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config http.postBuffer 524288000
-          git add -A toolchain-transfer/parts
-          if git diff --cached --quiet; then
-            echo "nothing to commit for payload parts"
-          else
-            git commit -m "CI[payload]: publish verified toolchain and APK archive parts"
-          fi
-          echo "local_head_after_payload_commit=$(git rev-parse HEAD)"
-          git push --porcelain origin HEAD:refs/heads/arena/7535fc36-pojavlauncher
+          batch=0
+          for ((i=0; i<${#parts[@]}; i+=4)); do
+            batch=$((batch+1))
+            chunk=("${parts[@]:i:4}")
+            echo "publishing batch $batch with ${#chunk[@]} parts"
+            git add -- "${chunk[@]}"
+            if ! git diff --cached --quiet; then
+              git commit -m "CI[payload]: publish transfer parts batch $batch"
+              git push --porcelain origin HEAD:refs/heads/arena/7535fc36-pojavlauncher
+            fi
+          done
+          echo "local_head_after_payload_commits=$(git rev-parse HEAD)"
