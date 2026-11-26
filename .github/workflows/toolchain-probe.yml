@@ -1,7 +1,11 @@
 name: Toolchain transfer probe
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - arena/7535fc36-pojavlauncher
+    paths:
+      - .github/workflows/toolchain-probe.yml
 
 permissions:
   contents: read
