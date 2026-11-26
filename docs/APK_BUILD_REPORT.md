@@ -1,6 +1,6 @@
 # PojavLauncher debug APK build and verification
 
-Both debug variants were built directly in the working environment from the final committed source state (`7017185`). The official toolchain was obtained through the verified GitHub/git transfer channel because the usual Gradle, Google Maven, Maven Central and JitPack hosts were unreachable from this environment. Every transferred archive and part was SHA-256 checked before use; no third-party prebuilt APK was used as the deliverable.
+Both debug variants were built directly in the working environment from committed source state `7017185`; subsequent commits only update this report and do not change build inputs. The official toolchain was obtained through the verified GitHub/git transfer channel because the usual Gradle, Google Maven, Maven Central and JitPack hosts were unreachable from this environment. Every transferred archive and part was SHA-256 checked before use; no third-party prebuilt APK was used as the deliverable.
 
 Toolchain actually used for the final builds:
 
