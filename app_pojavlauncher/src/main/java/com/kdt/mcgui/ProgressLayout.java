@@ -173,7 +173,7 @@ public class ProgressLayout extends ConstraintLayout implements View.OnClickList
         public void onProgressUpdated(int progress, int resid, Object... va) {
             final String text;
             if(resid != -1) text = getContext().getString(resid, va);
-            else if(va.length > 0 && va[0] != null) text = (String)va[0];
+            else if(va != null && va.length > 0 && va[0] != null) text = (String)va[0];
             else text = "";
             post(()-> {
                 // Skip layout invalidations when a download reports the same values again.

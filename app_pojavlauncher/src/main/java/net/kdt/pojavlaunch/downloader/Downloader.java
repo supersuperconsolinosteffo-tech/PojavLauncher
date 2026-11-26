@@ -115,7 +115,8 @@ public class Downloader {
         try (ExecutorService executorService = Executors.newFixedThreadPool(4)) {
             for(TaskMetadata element : reducedList) executorService.submit(new CompleteMetadataTask(element, this));
             executorService.shutdown();
-            while (!executorService.awaitTermination(PerformanceProfile.getProgressIntervalMs(), TimeUnit.MILLISECONDS)) {
+            long progressIntervalMs = PerformanceProfile.getProgressIntervalMs();
+            while (!executorService.awaitTermination(progressIntervalMs, TimeUnit.MILLISECONDS)) {
                 IOException exception = mThreadException.get();
                 if(exception != null) throw exception;
                 reportCountProgress(R.string.newerdl_inserting_metadata_count, reducedList.size());

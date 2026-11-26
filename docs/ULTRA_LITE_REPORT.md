@@ -8,7 +8,7 @@ Static verification: `python3 scripts/verify_static.py`
 
 > **Branch and push.** This environment fixes the session to the branch above; it does not
 > allow creating or switching branches, so the requested `ultra-lite-optimization` branch
-> could not be created here. All seven commits are on the current branch, none of them touches
+> could not be created here. All eight commits are on the current branch, none of them touches
 > `v3_openjdk`, and no push was performed. The `origin` remote
 > (`https://github.com/supersuperconsolinosteffo-tech/PojavLauncher.git`) is unchanged, so
 > upstream synchronization still works. To get the requested name, create it from this branch
@@ -168,7 +168,7 @@ settings.
 | Metric | Baseline `5431df4` | Final `HEAD` | Delta |
 | --- | --- | --- | --- |
 | Tracked files | 849 | 772 | -77 |
-| Tracked bytes (no `.git`) | 73,567,646 | 72,858,110 | -709,536 |
+| Tracked bytes (no `.git`) | 73,567,646 | about 72.86 MB | about -0.71 MB |
 | Java sources | 335 | 334 | -1 |
 | Kotlin sources | 24 | 24 | 0 |
 | Java + Kotlin lines | 38,196 | 38,409 | +213 |
@@ -337,7 +337,7 @@ hashes in section G.
 
 ## G. Git history
 
-Seven commits on `arena/7535fc36-pojavlauncher`, logically grouped by phase, following the
+Eight commits on `arena/7535fc36-pojavlauncher`, logically grouped by phase, following the
 project's `Upd/Fix/Feat[what_changed]: description` convention:
 
 | Commit | Phase |
@@ -348,8 +348,9 @@ project's `Upd/Fix/Feat[what_changed]: description` convention:
 | `1890ffd` | `Upd[runtime]: release idle threads, stop UI polling and fix retained listeners` |
 | `5166da5` | `Feat[prefs]: add optional Balanced/Ultra-Lite/Custom performance profiles` |
 | `885aef0` | `Upd[ui]: avoid duplicate fragment callbacks and redundant progress view updates` |
-| HEAD | `Upd[docs]: add final Ultra-Lite change, compatibility and measurement report` (this document) |
+| `21c8b99` | `Upd[docs]: add final Ultra-Lite change, compatibility and measurement report` |
+| HEAD | `Upd[runtime,docs]: guard progress varargs and finalize Ultra-Lite report` |
 
 `git status` is clean. The working tree was clean before work started, so no user changes were
-overwritten. `git diff 5431df4..HEAD --stat` shows 104 files changed, 1308 insertions and
-1151 deletions (excluding binary deletions).
+overwritten. `git diff --stat 5431df4..HEAD` lists the full changeset (about 104 files,
+excluding binary deletions); run it for exact line counts.
