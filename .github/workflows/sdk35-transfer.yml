@@ -40,9 +40,9 @@ jobs:
           grep -E 'Pkg.Revision=' "$SDK/build-tools/35.0.0/source.properties"
           rm -rf /tmp/sdk35
           mkdir -p /tmp/sdk35/payload/logs /tmp/sdk35/payload/metadata /tmp/sdk35/payload/sdk
-          cp -a "$SDK/build-tools/35.0.0" /tmp/sdk35/payload/sdk/
-          tar -czf /tmp/sdk35/payload/build-tools-35.0.0.tar.gz -C /tmp/sdk35/payload/sdk build-tools-35.0.0 2>/dev/null || true
-          # The tar command above uses the actual directory name.
+          mkdir -p /tmp/sdk35/payload/sdk/build-tools
+          cp -a "$SDK/build-tools/35.0.0" /tmp/sdk35/payload/sdk/build-tools/
+          tar -czf /tmp/sdk35/payload/build-tools-35.0.0.tar.gz -C /tmp/sdk35/payload/sdk build-tools/35.0.0
           test -f /tmp/sdk35/payload/build-tools-35.0.0.tar.gz
           sha256sum /tmp/sdk35/payload/build-tools-35.0.0.tar.gz > /tmp/sdk35/payload/metadata/archive.sha256
           split -b 16m -d -a 4 /tmp/sdk35/payload/build-tools-35.0.0.tar.gz /tmp/sdk35/payload/part_
