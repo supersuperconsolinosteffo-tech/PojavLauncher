@@ -206,6 +206,9 @@ public class LauncherActivity extends BaseActivity {
         mProgressLayout.observe(ProgressLayout.DOWNLOAD_VERSION_LIST);
         mProgressLayout.observe(ProgressLayout.INSTANCE_INSTALL);
         mProgressLayout.observe(ProgressLayout.DATA_MIGRATION);
+
+        // Register once. onStart() used to add the same callback on every return to the launcher.
+        getSupportFragmentManager().registerFragmentLifecycleCallbacks(mFragmentCallbackListener, true);
     }
 
     @Override
@@ -219,12 +222,6 @@ public class LauncherActivity extends BaseActivity {
     protected void onPause() {
         super.onPause();
         ContextExecutor.clearActivity();
-    }
-
-    @Override
-    protected void onStart() {
-        super.onStart();
-        getSupportFragmentManager().registerFragmentLifecycleCallbacks(mFragmentCallbackListener, true);
     }
 
     @Override

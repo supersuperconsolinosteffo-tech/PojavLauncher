@@ -87,11 +87,6 @@ public class LauncherPreferenceMiscellaneousFragment extends LauncherPreferenceF
         });
     }
 
-    @Override
-    public void onResume() {
-        super.onResume();
-    }
-
     private void setupMicrophoneRequestPreference() {
         Preference mRequestMicrophonePermissionPreference = requirePreference("microphoneAccessRequest");
         Activity activity = getActivity();
