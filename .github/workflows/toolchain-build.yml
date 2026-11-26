@@ -1,0 +1,314 @@
+name: Toolchain and APK transfer
+
+on:
+  push:
+    branches:
+      - arena/7535fc36-pojavlauncher
+    paths:
+      - .github/workflows/toolchain-build.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: toolchain-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      GRADLE_USER_HOME: /home/runner/.gradle
+      CURSEFORGE_API_KEY: DUMMY
+      JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8
+
+    steps:
+      - name: Checkout active branch
+        uses: actions/checkout@v4
+        with:
+          ref: arena/7535fc36-pojavlauncher
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: true
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Locate Android SDK manager
+        id: sdk
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            for candidate in \
+              "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+              "$ANDROID_HOME/cmdline-tools/bin/sdkmanager" \
+              "$ANDROID_HOME/tools/bin/sdkmanager"; do
+              if [ -x "$candidate" ]; then SDKMANAGER="$candidate"; break; fi
+            done
+          fi
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager not found" >&2
+            ls -la "$ANDROID_HOME" >&2 || true
+            exit 1
+          fi
+          echo "sdkmanager=$SDKMANAGER"
+          echo "sdkmanager=$SDKMANAGER" >> "$GITHUB_OUTPUT"
+          "$SDKMANAGER" --version | tee sdkmanager-version.txt
+
+      - name: Install Android SDK, NDK and CMake
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER='${{ steps.sdk.outputs.sdkmanager }}'
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;29.0.14206865" \
+            "cmake;3.22.1" | tee sdkmanager-install.log
+          "$SDKMANAGER" --list_installed | tee sdk-installed.txt
+
+      - name: Set up Gradle 8.14.5
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14.5"
+
+      - name: Select Gradle command
+        id: gradlecmd
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v gradle >/dev/null 2>&1; then
+            GRADLE_CMD=gradle
+          else
+            GRADLE_CMD=./gradlew
+          fi
+          echo "GRADLE_CMD=$GRADLE_CMD"
+          echo "gradle_cmd=$GRADLE_CMD" >> "$GITHUB_OUTPUT"
+          "$GRADLE_CMD" --version | tee gradle-version.txt
+
+      - name: Download and verify official Gradle 8.14.5 archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gradle-official
+          curl -fL --retry 3 --retry-delay 2 \
+            -o /tmp/gradle-official/gradle-8.14.5-bin.zip \
+            https://github.com/gradle/gradle-distributions/releases/download/v8.14.5/gradle-8.14.5-bin.zip
+          curl -fL --retry 3 --retry-delay 2 \
+            -o /tmp/gradle-official/gradle-8.14.5-bin.zip.sha256 \
+            https://services.gradle.org/distributions/gradle-8.14.5-bin.zip.sha256
+          expected="$(tr -d '[:space:]' < /tmp/gradle-official/gradle-8.14.5-bin.zip.sha256)"
+          actual="$(sha256sum /tmp/gradle-official/gradle-8.14.5-bin.zip | awk '{print $1}')"
+          echo "expected=$expected" | tee gradle-checksum.txt
+          echo "actual=$actual" | tee -a gradle-checksum.txt
+          test "$expected" = "$actual"
+          unzip -t /tmp/gradle-official/gradle-8.14.5-bin.zip | tail -2 | tee gradle-unzip-test.txt
+          unzip -q /tmp/gradle-official/gradle-8.14.5-bin.zip -d /tmp/gradle-official
+          /tmp/gradle-official/gradle-8.14.5/bin/gradle --version | tee -a gradle-version.txt
+
+      - name: Write toolchain and repository manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "date=$(date -u +%FT%TZ)"
+            echo "commit=$(git rev-parse HEAD)"
+            echo "branch=$(git branch --show-current)"
+            echo "java_home=$JAVA_HOME"
+            echo "android_home=$ANDROID_HOME"
+            echo "gradle_user_home=$GRADLE_USER_HOME"
+            echo
+            echo "--- java ---"
+            java -version 2>&1
+            javac -version 2>&1
+            echo
+            echo "--- gradle ---"
+            cat gradle-version.txt
+            echo
+            echo "--- CMake / Ninja from Android SDK ---"
+            "$ANDROID_HOME/cmake/3.22.1/bin/cmake" --version
+            "$ANDROID_HOME/cmake/3.22.1/bin/ninja" --version
+            echo
+            echo "--- Android platform / build tools / NDK source.properties ---"
+            grep -E '^(Pkg\.Desc|Pkg\.Revision|AndroidVersion\.ApiLevel|Pkg\.Path)=' \
+              "$ANDROID_HOME/platforms/android-36/source.properties" \
+              "$ANDROID_HOME/build-tools/36.0.0/source.properties" \
+              "$ANDROID_HOME/ndk/29.0.14206865/source.properties" || true
+            echo
+            echo "--- submodules ---"
+            git submodule status
+            echo
+            echo "--- git status ---"
+            git status -sb
+          } | tee toolchain-manifest.txt
+
+      - name: Run static verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 --version
+          python3 -m pip install --quiet javalang
+          python3 scripts/verify_static.py | tee static-verify.log
+
+      - name: Inspect real Gradle tasks
+        shell: bash
+        run: |
+          set -euo pipefail
+          GRADLE_CMD='${{ steps.gradlecmd.outputs.gradle_cmd }}'
+          "$GRADLE_CMD" :app_pojavlauncher:tasks --all --no-daemon --console=plain 2>&1 | tee gradle-tasks.log
+          grep -E '^assemble(Full|Noruntime)Debug|^bundle(Full|Noruntime)Debug|^compile(Full|Noruntime)Debug' gradle-tasks.log | tee gradle-apk-tasks.txt || true
+
+      - name: Build noruntime debug APK
+        id: build_noruntime
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          GRADLE_CMD='${{ steps.gradlecmd.outputs.gradle_cmd }}'
+          "$GRADLE_CMD" :app_pojavlauncher:assembleNoruntimeDebug \
+            --no-daemon --stacktrace --console=plain 2>&1 | tee build-noruntime.log
+          rc=${PIPESTATUS[0]}
+          echo "$rc" > build-noruntime.exit
+          echo "exit=$rc" | tee -a build-noruntime.log
+          exit "$rc"
+
+      - name: Build full debug APK
+        id: build_full
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          GRADLE_CMD='${{ steps.gradlecmd.outputs.gradle_cmd }}'
+          "$GRADLE_CMD" :app_pojavlauncher:assembleFullDebug \
+            --no-daemon --stacktrace --console=plain 2>&1 | tee build-full.log
+          rc=${PIPESTATUS[0]}
+          echo "$rc" > build-full.exit
+          echo "exit=$rc" | tee -a build-full.log
+          exit "$rc"
+
+      - name: Locate and verify generated APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          BT="$ANDROID_HOME/build-tools/36.0.0"
+          export PATH="$BT:$JAVA_HOME/bin:$PATH"
+          find app_pojavlauncher/build/outputs -type f -name '*.apk' -printf '%p %s bytes\n' | sort | tee apk-list.txt || true
+          {
+            echo "=== APK verification ==="
+            echo "build-noruntime exit=$(cat build-noruntime.exit 2>/dev/null || echo missing)"
+            echo "build-full exit=$(cat build-full.exit 2>/dev/null || echo missing)"
+            echo
+            while read -r apk size unit; do
+              [ -f "$apk" ] || continue
+              echo "--- $apk ($size $unit) ---"
+              stat -c 'size=%s bytes' "$apk"
+              sha256sum "$apk"
+              echo "-- aapt dump badging --"
+              aapt dump badging "$apk" | grep -E '^(package|application-label|sdkVersion|targetSdkVersion|native-code|uses-permission: name=.android.permission.INTERNET)' || true
+              echo "-- apksigner verify --"
+              apksigner verify --print-certs "$apk" || true
+              echo "-- zipalign check --"
+              zipalign -c -v 4 "$apk" | tail -3 || true
+              echo "-- included native ABIs --"
+              unzip -l "$apk" | awk '/ lib\/[^\/]+\/.*\.so$/ {split($4,a,"/"); print a[2]}' | sort -u || true
+              echo
+            done < apk-list.txt
+            echo "-- debug keystore fingerprint --"
+            keytool -list -v -keystore app_pojavlauncher/debug.keystore \
+              -storepass android -alias androiddebugkey 2>/dev/null | grep -E 'Alias name|Owner|SHA256|MD5|Valid from' || true
+          } | tee apk-verify.txt
+
+      - name: Package toolchain, caches, logs and APKs for git transfer
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/transfer
+          mkdir -p /tmp/transfer/payload/logs /tmp/transfer/payload/metadata /tmp/transfer/payload/apks /tmp/transfer/payload/gradle-official /tmp/transfer/sdk
+          cp -f sdkmanager-version.txt sdkmanager-install.log sdk-installed.txt gradle-version.txt gradle-checksum.txt gradle-unzip-test.txt \
+                toolchain-manifest.txt static-verify.log gradle-tasks.log gradle-apk-tasks.txt \
+                build-noruntime.log build-noruntime.exit build-full.log build-full.exit \
+                apk-list.txt apk-verify.txt /tmp/transfer/payload/logs/ 2>/dev/null || true
+          cp -f /tmp/gradle-official/gradle-8.14.5-bin.zip /tmp/gradle-official/gradle-8.14.5-bin.zip.sha256 /tmp/transfer/payload/gradle-official/ || true
+          find app_pojavlauncher/build/outputs -type f -name '*.apk' -exec cp -f --parents {} /tmp/transfer/payload/apks/ \; 2>/dev/null || true
+          tar -czf /tmp/transfer/payload/gradle-dist.tar.gz -C /tmp/gradle-official gradle-8.14.5 gradle-8.14.5-bin.zip gradle-8.14.5-bin.zip.sha256 2>/dev/null || true
+          tar -czf /tmp/transfer/payload/gradle-home.tar.gz \
+            --exclude='./daemon' --exclude='./workers' --exclude='./.tmp' \
+            --exclude='./caches/transforms-*' --exclude='./caches/jars-*' \
+            -C "$GRADLE_USER_HOME" . 2>/dev/null || true
+          if [ -d /opt/hostedtoolcache/gradle/8.14.5 ]; then
+            tar -czf /tmp/transfer/payload/gradle-toolcache.tar.gz -C /opt/hostedtoolcache gradle/8.14.5 || true
+          fi
+          for d in platforms/android-36 build-tools/36.0.0 ndk/29.0.14206865 cmake/3.22.1 cmdline-tools/latest licenses platform-tools; do
+            if [ -e "$ANDROID_HOME/$d" ]; then
+              mkdir -p "/tmp/transfer/sdk/$(dirname "$d")"
+              cp -a "$ANDROID_HOME/$d" "/tmp/transfer/sdk/$d"
+            fi
+          done
+          tar -czf /tmp/transfer/payload/android-sdk.tar.gz -C /tmp/transfer/sdk . || true
+          if [ -d app_pojavlauncher/build/intermediates ]; then
+            tar -czf /tmp/transfer/payload/remote-assets.tar.gz \
+              -C app_pojavlauncher/build/intermediates \
+              --exclude='./merged_assets' --exclude='./incremental' --exclude='./javac' \
+              download_deps remote_asset_set package_jar_deps 2>/dev/null || true
+          fi
+          {
+            echo "transfer-manifest"
+            echo "date=$(date -u +%FT%TZ)"
+            echo "commit=$(git rev-parse HEAD)"
+            echo "gradle_cmd=${{ steps.gradlecmd.outputs.gradle_cmd }}"
+            echo "noruntime_exit=$(cat build-noruntime.exit 2>/dev/null || echo missing)"
+            echo "full_exit=$(cat build-full.exit 2>/dev/null || echo missing)"
+            echo "gradle_sha256=$(sha256sum /tmp/gradle-official/gradle-8.14.5-bin.zip 2>/dev/null | awk '{print $1}' || true)"
+            echo
+            echo "payload contents:"
+            find /tmp/transfer/payload -maxdepth 3 -type f -printf '%P %s bytes\n' | sort
+          } > /tmp/transfer/payload/metadata/manifest.txt
+          du -sh /tmp/transfer/payload | tee /tmp/transfer/payload/metadata/payload-size.txt
+          cd /tmp/transfer
+          tar -czf transfer.tar.gz payload
+          sha256sum transfer.tar.gz > transfer.sha256
+          split -b 64m -d -a 4 transfer.tar.gz part_
+          sha256sum part_* > parts.sha256
+          {
+            echo "archive=transfer.tar.gz"
+            echo "archive_sha256=$(awk '{print $1}' transfer.sha256)"
+            echo "part_count=$(ls part_* | wc -l)"
+            echo "part_size_bytes=67108864"
+            echo "part_pattern=part_%04d"
+            echo "parts_sha256=parts.sha256"
+            echo "noruntime_exit=$(cat /tmp/transfer/payload/logs/build-noruntime.exit 2>/dev/null || echo missing)"
+            echo "full_exit=$(cat /tmp/transfer/payload/logs/build-full.exit 2>/dev/null || echo missing)"
+          } > transfer-manifest.txt
+          mkdir -p toolchain-transfer/parts
+          cp -f transfer.sha256 parts.sha256 transfer-manifest.txt toolchain-transfer/
+          cp -f /tmp/transfer/payload/metadata/* toolchain-transfer/
+          cp -f /tmp/transfer/payload/logs/* toolchain-transfer/ 2>/dev/null || true
+          cp -f part_* toolchain-transfer/parts/
+          echo "packed $(ls part_* | wc -l) parts, total $(du -sh /tmp/transfer | awk '{print $1}')"
+
+      - name: Commit transfer payload to active branch
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config http.postBuffer 524288000
+          git add toolchain-transfer
+          git commit -m "CI[toolchain]: publish verified build transfer payload" || echo "nothing to commit"
+          git pull --rebase origin arena/7535fc36-pojavlauncher || true
+          git push origin HEAD:arena/7535fc36-pojavlauncher
