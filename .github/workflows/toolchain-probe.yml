@@ -1,0 +1,22 @@
+name: Toolchain transfer probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Write probe
+        run: |
+          echo "toolchain-probe $(date -u +%FT%TZ)" > probe.txt
+      - name: Upload probe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: toolchain-probe
+          path: probe.txt
+          retention-days: 1
