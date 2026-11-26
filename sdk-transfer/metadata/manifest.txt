@@ -1,8 +1,8 @@
-date=2026-11-26T20:35:01Z
-commit=56abdd73f7aa636e8594df2b0a7bd6184b970044
+date=2026-11-26T20:35:56Z
+commit=f718bdf5f3fbc413a6ad8aabf5d7905126590a2d
 archive=build-tools-35.0.0.tar.gz
-archive_sha256=85cea451eec057fa7e734548ca3ba6d779ed5836a3f9de14b8394575ef0d7d8e
-part_count=1
+archive_sha256=220a6763678896bb960851d0b7156ef83af4f1186f3f041929db660a22781c1f
+part_count=4
 part_size_bytes=16777216
 sdk_path=/usr/local/lib/android/sdk/build-tools/35.0.0
 Pkg.UserSrc=false
