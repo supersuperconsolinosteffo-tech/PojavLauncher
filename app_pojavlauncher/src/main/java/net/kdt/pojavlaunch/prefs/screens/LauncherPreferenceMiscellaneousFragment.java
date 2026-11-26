@@ -9,6 +9,7 @@ import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
+import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 
 import com.kdt.mcgui.ProgressLayout;
@@ -18,6 +19,7 @@ import net.kdt.pojavlaunch.R;
 import net.kdt.pojavlaunch.LauncherActivity;
 import net.kdt.pojavlaunch.PojavApplication;
 import net.kdt.pojavlaunch.Tools;
+import net.kdt.pojavlaunch.prefs.PerformanceProfile;
 import net.kdt.pojavlaunch.tasks.DataMigrator;
 
 import org.apache.commons.io.FileUtils;
@@ -52,12 +54,37 @@ public class LauncherPreferenceMiscellaneousFragment extends LauncherPreferenceF
         });
         setupCacheClearPreference();
         setupMicrophoneRequestPreference();
+        setupPerformanceProfilePreferences();
         updateVisibility();
     }
 
     private void updateVisibility(){
         requirePreference("microphoneAccessRequest").setVisible(!getLauncherActivity().checkForPermissionRationale(33, Manifest.permission.RECORD_AUDIO));
         requirePreference("clearMetadataCache").setVisible(new File(Tools.DIR_CACHE, "string_cache").exists());
+        boolean custom = PerformanceProfile.PROFILE_CUSTOM.equals(PerformanceProfile.getProfile());
+        for(String key : PERFORMANCE_SWITCHES) requirePreference(key).setEnabled(custom);
+        PerformanceProfile.DeviceInfo info = PerformanceProfile.DeviceInfo.detect(requireContext());
+        int suggestedName = PerformanceProfile.PROFILE_ULTRA_LITE.equals(info.suggestProfile())
+                ? R.string.perf_profile_ultra_lite : R.string.perf_profile_balanced;
+        requirePreference("performanceProfileInfo").setSummary(info.describe(requireContext(), suggestedName));
+    }
+
+    private static final String[] PERFORMANCE_SWITCHES = {
+            PerformanceProfile.KEY_MINIMAL_BACKGROUND,
+            PerformanceProfile.KEY_SMALL_ICON_CACHE,
+            PerformanceProfile.KEY_LOW_PROGRESS_RATE,
+            PerformanceProfile.KEY_DISABLE_LOGCAT
+    };
+
+    private void setupPerformanceProfilePreferences() {
+        requirePreference("performanceProfileInfo").setOnPreferenceClickListener(preference -> {
+            String suggested = PerformanceProfile.DeviceInfo.detect(requireContext()).suggestProfile();
+            ListPreference profile = requirePreference(PerformanceProfile.KEY_PROFILE, ListPreference.class);
+            profile.setValue(suggested);
+            updateVisibility();
+            Toast.makeText(getContext(), R.string.perf_profile_applied, Toast.LENGTH_SHORT).show();
+            return true;
+        });
     }
 
     @Override

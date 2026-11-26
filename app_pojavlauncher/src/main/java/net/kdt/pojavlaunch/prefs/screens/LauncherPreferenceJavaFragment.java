@@ -29,6 +29,7 @@ import net.kdt.pojavlaunch.contracts.OpenDocumentWithExtension;
 import net.kdt.pojavlaunch.multirt.MultiRTConfigDialog;
 import net.kdt.pojavlaunch.prefs.CustomSeekBarPreference;
 import net.kdt.pojavlaunch.prefs.LauncherPreferences;
+import net.kdt.pojavlaunch.prefs.PerformanceProfile;
 import net.kdt.pojavlaunch.utils.MemoryUtils;
 
 public class LauncherPreferenceJavaFragment extends LauncherPreferenceFragment {
@@ -91,6 +92,15 @@ public class LauncherPreferenceJavaFragment extends LauncherPreferenceFragment {
 
         requirePreference("install_jre").setOnPreferenceClickListener(preference->{
             openMultiRTDialog();
+            return true;
+        });
+
+        requirePreference("applyRecommendedHeap").setOnPreferenceClickListener(preference -> {
+            int recommended = PerformanceProfile.applyRecommendedHeap(requireContext());
+            mMemorySeek.setValue(recommended);
+            updateMemoryInfo(requireContext(), mMemorySeek);
+            Toast.makeText(requireContext(),
+                    getString(R.string.perf_heap_applied, recommended), Toast.LENGTH_SHORT).show();
             return true;
         });
     }

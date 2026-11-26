@@ -40,6 +40,7 @@ import net.kdt.pojavlaunch.lifecycle.ContextAwareDoneListener;
 import net.kdt.pojavlaunch.lifecycle.ContextExecutor;
 import net.kdt.pojavlaunch.modloaders.modpacks.imagecache.IconCacheJanitor;
 import net.kdt.pojavlaunch.prefs.LauncherPreferences;
+import net.kdt.pojavlaunch.prefs.PerformanceProfile;
 import net.kdt.pojavlaunch.prefs.screens.LauncherPreferenceFragment;
 import net.kdt.pojavlaunch.progresskeeper.ProgressKeeper;
 import net.kdt.pojavlaunch.progresskeeper.TaskCountListener;
@@ -171,7 +172,7 @@ public class LauncherActivity extends BaseActivity {
             throw new RuntimeException(e);
         }
 
-        IconCacheJanitor.runJanitor();
+        if(!PerformanceProfile.useMinimalBackgroundWork()) IconCacheJanitor.runJanitor();
 
         getWindow().setBackgroundDrawable(null);
         bindViews();

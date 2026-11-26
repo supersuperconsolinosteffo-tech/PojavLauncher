@@ -6,6 +6,7 @@ import android.util.Log;
 
 import net.kdt.pojavlaunch.Tools;
 import net.kdt.pojavlaunch.instances.Instance;
+import net.kdt.pojavlaunch.prefs.PerformanceProfile;
 import net.kdt.pojavlaunch.utils.FileUtils;
 
 import java.io.File;
@@ -21,8 +22,9 @@ import java.util.concurrent.TimeUnit;
 public class ModIconCache {
     // Two workers are enough for on-screen icons. Core threads used to stay alive for the
     // whole lifetime of the adapter, keeping ten idle thread stacks in the launcher process.
-    private final ThreadPoolExecutor cacheLoaderPool = new ThreadPoolExecutor(2,
-            2,
+    private final ThreadPoolExecutor cacheLoaderPool = new ThreadPoolExecutor(
+            PerformanceProfile.getIconLoaderThreads(),
+            PerformanceProfile.getIconLoaderThreads(),
             30,
             TimeUnit.SECONDS,
             new LinkedBlockingQueue<>());
@@ -34,7 +36,9 @@ public class ModIconCache {
         if(!FileUtils.ensureDirectorySilently(cachePath)) {
                 throw new RuntimeException("Failed to create icon cache directory");
         }
-
+        // Cache maintenance is needed whenever icons are read, including when the launcher
+        // start scan was skipped by the Ultra-Lite profile.
+        IconCacheJanitor.runJanitor();
     }
     static File getImageCachePath() {
         return new File(Tools.DIR_CACHE, "mod_icons");

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+
+    <string name="perf_category_title">Performance profile</string>
+    <string name="perf_profile_title">Profile</string>
+    <string name="perf_profile_summary">Balanced keeps the normal launcher behaviour. Ultra-Lite reduces background work and caching on 3–4 GB devices.</string>
+    <string name="perf_profile_balanced">Balanced (default)</string>
+    <string name="perf_profile_ultra_lite">Ultra-Lite</string>
+    <string name="perf_profile_custom">Custom</string>
+
+    <string-array name="perf_profile_names">
+        <item>@string/perf_profile_balanced</item>
+        <item>@string/perf_profile_ultra_lite</item>
+        <item>@string/perf_profile_custom</item>
+    </string-array>
+    <string-array name="perf_profile_values">
+        <item>balanced</item>
+        <item>ultra_lite</item>
+        <item>custom</item>
+    </string-array>
+
+    <string name="perf_profile_info_title">Device capabilities</string>
+    <string name="perf_device_info">Total RAM: %1$s · Available: %2$s · Android %3$s (API %4$d) · %5$s · %6$d cores · %7$d Java runtimes\nSuggested: %8$s\nTap to apply the suggested profile.</string>
+    <string name="perf_profile_applied">Suggested profile applied.</string>
+
+    <string name="perf_custom_hint">These switches apply in the Custom profile. Ultra-Lite enables the first three automatically.</string>
+    <string name="perf_minimal_background_title">Minimal background work</string>
+    <string name="perf_minimal_background_summary">Skip the mod icon cache scan when the launcher starts. The scan still runs when browsing mods.</string>
+    <string name="perf_small_icon_cache_title">Small mod icon cache</string>
+    <string name="perf_small_icon_cache_summary">Keep at most 16 MB of cached mod icons and use one loader thread.</string>
+    <string name="perf_low_progress_title">Low progress refresh rate</string>
+    <string name="perf_low_progress_summary">Refresh download progress four times a second instead of ten.</string>
+    <string name="perf_disable_logcat_title">Disable logcat capture</string>
+    <string name="perf_disable_logcat_summary">Skips the logcat reader while the game runs. latestlog.txt then contains only launcher messages. Use only if game logs are not needed.</string>
+
+    <string name="perf_heap_title">Apply recommended heap size</string>
+    <string name="perf_heap_summary">Sets the memory allocation to a conservative value for this device. Custom Java arguments are never changed.</string>
+    <string name="perf_heap_applied">Recommended heap: %1$d MB. Restart the game for it to take effect.</string>
+</resources>

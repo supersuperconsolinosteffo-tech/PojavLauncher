@@ -12,10 +12,15 @@ import net.kdt.pojavlaunch.*;
 import net.kdt.pojavlaunch.multirt.Runtime;
 import net.kdt.pojavlaunch.plugins.LibraryPlugin;
 import net.kdt.pojavlaunch.prefs.*;
+import net.kdt.pojavlaunch.prefs.PerformanceProfile;
 import net.kdt.pojavlaunch.game.renderer.GameRenderer;
 
 public class JREUtils {
     public static void redirectAndPrintJRELog() {
+        if(PerformanceProfile.isLogcatCaptureDisabled()) {
+            Logger.appendToLog("Logcat capture disabled by the Custom performance profile.");
+            return;
+        }
         Log.v("jrelog","Log starts here");
         new Thread(new Runnable(){
             int failTime = 0;

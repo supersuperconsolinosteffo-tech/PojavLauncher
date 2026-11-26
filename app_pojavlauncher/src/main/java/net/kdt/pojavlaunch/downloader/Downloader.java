@@ -3,6 +3,7 @@ package net.kdt.pojavlaunch.downloader;
 import com.kdt.mcgui.ProgressLayout;
 
 import net.kdt.pojavlaunch.Tools;
+import net.kdt.pojavlaunch.prefs.PerformanceProfile;
 import net.kdt.pojavlaunch.tasks.SpeedCalculator;
 import net.kdt.pojavlaunch.utils.DownloadUtils;
 
@@ -31,9 +32,8 @@ import net.kdt.pojavlaunch.utils.FileUtils;
 
 public class Downloader {
     private static final double ONE_MEGABYTE = (1024d * 1024d);
-    // Progress is a display value. Reporting it 30 times a second allocates a runnable, a
-    // vararg array and a string on every tick for every listener and the notification.
-    private static final long PROGRESS_INTERVAL_MS = 100L;
+    // Progress is a display value. Frequent updates allocate a runnable, a vararg array and a
+    // string for every listener and for the notification.
     private static final ThreadLocal<byte[]> sThreadLocalBuffer = new ThreadLocal<>();
     protected static final File sPartFileDir = new File(Tools.DIR_GAME_HOME, "partfiles");
     private final String mProgressKey;
@@ -82,17 +82,18 @@ public class Downloader {
             mVerifyService.submit(new CheckFileOnDiskTask(element, this));
         }
         double totalMegabytes = totalSize / ONE_MEGABYTE;
+        long progressIntervalMs = PerformanceProfile.getProgressIntervalMs();
         long lastReportTime = 0L;
         while(mDownloadedFileCounter.get() < totalCount) {
             IOException exception = mThreadException.get();
             if(exception != null) throw exception;
             long now = System.currentTimeMillis();
-            if(lastReportTime == 0L || now - lastReportTime >= PROGRESS_INTERVAL_MS) {
+            if(lastReportTime == 0L || now - lastReportTime >= progressIntervalMs) {
                 if(sizeCounter) reportSizeProgress(totalMegabytes);
                 else reportCountProgress(R.string.newerdl_downloading_files_count, totalCount);
                 lastReportTime = now;
             }
-            Thread.sleep(PROGRESS_INTERVAL_MS);
+            Thread.sleep(progressIntervalMs);
         }
         mDownloadService.shutdown();
         mVerifyService.shutdown();
@@ -114,7 +115,7 @@ public class Downloader {
         try (ExecutorService executorService = Executors.newFixedThreadPool(4)) {
             for(TaskMetadata element : reducedList) executorService.submit(new CompleteMetadataTask(element, this));
             executorService.shutdown();
-            while (!executorService.awaitTermination(PROGRESS_INTERVAL_MS, TimeUnit.MILLISECONDS)) {
+            while (!executorService.awaitTermination(PerformanceProfile.getProgressIntervalMs(), TimeUnit.MILLISECONDS)) {
                 IOException exception = mThreadException.get();
                 if(exception != null) throw exception;
                 reportCountProgress(R.string.newerdl_inserting_metadata_count, reducedList.size());
