@@ -1,6 +1,6 @@
 archive=transfer.tar.gz
-archive_sha256=034ee10e8e20778225abb285ba472a72548dd1d058842621cb8b959a12ca2b48
-part_count=29
+archive_sha256=933f1bb3fd1c7bc7c1abb0f2a1e77013e0fe6d3c3ff9fbded80361a1b5aa0884
+part_count=23
 part_size_bytes=67108864
 part_pattern=part_%04d
 parts_sha256=parts.sha256

@@ -1,1 +1,1 @@
-1.9G	/tmp/transfer/payload
+1.5G	/tmp/transfer/payload

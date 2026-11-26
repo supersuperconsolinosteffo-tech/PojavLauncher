@@ -1,23 +1,22 @@
 transfer-manifest
-date=2026-11-26T19:34:21Z
-commit=37c7ab38407e2da5e6340b850610809c878e2bb2
+date=2026-11-26T19:50:23Z
+commit=30b53ca34f1dade562c0d012ec798a339198c55d
 gradle_cmd=gradle
 noruntime_exit=1
 full_exit=1
 gradle_sha256=6f74b601422d6d6fc4e1f9a1ab6522f642c2fdcbc15ae33ebd30ba3d7198e854
 
 payload contents:
-android-sdk.tar.gz 1053414569 bytes
-gradle-dist.tar.gz 275922442 bytes
-gradle-home.tar.gz 420783085 bytes
-gradle-official/gradle-8.14.5-bin.zip 138068841 bytes
+android-sdk.tar.gz 927490344 bytes
+gradle-dist.tar.gz 137858529 bytes
+gradle-home.tar.gz 420769958 bytes
 gradle-official/gradle-8.14.5-bin.zip.sha256 64 bytes
 logs/apk-list.txt 0 bytes
 logs/apk-verify.txt 392 bytes
 logs/build-full.exit 2 bytes
-logs/build-full.log 108403 bytes
+logs/build-full.log 114380 bytes
 logs/build-noruntime.exit 2 bytes
-logs/build-noruntime.log 106361 bytes
+logs/build-noruntime.log 112396 bytes
 logs/gradle-apk-tasks.txt 1994 bytes
 logs/gradle-checksum.txt 146 bytes
 logs/gradle-tasks.log 68017 bytes
@@ -29,4 +28,4 @@ logs/sdkmanager-version.txt 5 bytes
 logs/static-verify.log 169 bytes
 logs/toolchain-manifest.txt 3126 bytes
 metadata/manifest.txt 237 bytes
-remote-assets.tar.gz 62854820 bytes
+remote-assets.tar.gz 62854818 bytes

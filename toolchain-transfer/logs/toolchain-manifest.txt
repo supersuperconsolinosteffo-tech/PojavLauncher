@@ -1,5 +1,5 @@
-date=2026-11-26T19:26:01Z
-commit=37c7ab38407e2da5e6340b850610809c878e2bb2
+date=2026-11-26T19:42:01Z
+commit=30b53ca34f1dade562c0d012ec798a339198c55d
 branch=arena/7535fc36-pojavlauncher
 java_home=/opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-2/x64
 android_home=/usr/local/lib/android/sdk
