@@ -1,0 +1,2 @@
+app_pojavlauncher/build/outputs/apk/full/debug/app_pojavlauncher-full-debug.apk 115654518 bytes
+app_pojavlauncher/build/outputs/apk/noruntime/debug/app_pojavlauncher-noruntime-debug.apk 86543119 bytes
