@@ -16,6 +16,11 @@ Static verification: `python3 scripts/verify_static.py`
 
 ---
 
+> **Finalization note (2026-11-26).** A later second-pass review, additional runtime fixes,
+> extended static verification, build attempts and delivery status are documented in
+> `docs/ULTRA_LITE_FINALIZATION_REPORT.md`. Where build/publishing results or commit counts in
+> sections A–G differ from that report, the finalization report is authoritative.
+
 ## A. Optimized source code
 
 The application is still PojavLauncher. Authentication, Microsoft/ElyBy/local login,

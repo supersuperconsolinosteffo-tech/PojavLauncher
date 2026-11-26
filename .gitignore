@@ -13,3 +13,6 @@ app_pojavlauncher/.cxx/
 
 # Python tooling
 __pycache__/
+
+# Generated delivery artifacts (patches, source archives, logs); not source code
+/dist/
