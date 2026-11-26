@@ -9,6 +9,7 @@ import android.graphics.Color;
 import android.view.View;
 
 import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.RecyclerView;
 import androidx.appcompat.app.AlertDialog;
 
 import net.kdt.pojavlaunch.Architecture;
@@ -184,8 +185,8 @@ public class RTRecyclerViewAdapter extends PackageAdapter<RTRecyclerViewAdapter.
                 try {
                     MultiRTUtils.removeRuntimeNamed(mCurrentRuntime.name);
                     mDeleteButton.post(() -> {
-                        if(getBindingAdapter() != null)
-                            getBindingAdapter().notifyDataSetChanged();
+                        if(getAdapterPosition() != RecyclerView.NO_POSITION)
+                            RTRecyclerViewAdapter.this.notifyDataSetChanged();
                     });
 
                 } catch (IOException e) {

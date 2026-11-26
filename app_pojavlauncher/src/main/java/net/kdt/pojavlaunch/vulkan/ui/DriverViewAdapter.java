@@ -12,6 +12,7 @@ import android.view.ViewGroup;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.RecyclerView;
 
 import net.kdt.pojavlaunch.dialogs.PackageAdapter;
 import net.kdt.pojavlaunch.vulkan.driver.AdrenoDriver;
@@ -118,7 +119,7 @@ public class DriverViewAdapter extends PackageAdapter<DriverViewAdapter.DriverVi
                 return;
             }
             displayDrivers.remove(mCurrentDriver);
-            if(getBindingAdapter() != null) getBindingAdapter().notifyDataSetChanged();
+            if(getAdapterPosition() != RecyclerView.NO_POSITION) DriverViewAdapter.this.notifyDataSetChanged();
         }
 
         // Delete driver

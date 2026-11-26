@@ -142,8 +142,12 @@ class MobileGluesMultidrawOrderFragment : Fragment(R.layout.fragment_mg_multidra
 
         override fun onMove(rv: RecyclerView, from: RecyclerView.ViewHolder, to: RecyclerView.ViewHolder): Boolean {
             if (!dragEnabled) return false
-            val fromPos = from.bindingAdapterPosition
-            val toPos = to.bindingAdapterPosition
+            // The cached RecyclerView version exposes adapterPosition, not
+            // bindingAdapterPosition. NO_POSITION is already handled below.
+            @Suppress("DEPRECATION")
+            val fromPos = from.adapterPosition
+            @Suppress("DEPRECATION")
+            val toPos = to.adapterPosition
             if (fromPos == RecyclerView.NO_POSITION || toPos == RecyclerView.NO_POSITION) return false
             rows.add(toPos, rows.removeAt(fromPos))
             adapter.notifyItemMoved(fromPos, toPos)
