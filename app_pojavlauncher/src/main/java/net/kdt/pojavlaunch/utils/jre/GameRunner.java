@@ -4,7 +4,6 @@ import static net.kdt.pojavlaunch.prefs.LauncherPreferences.PREF_ZINK_PREFER_SYS
 
 import android.content.Context;
 import android.util.ArrayMap;
-import android.content.Context;
 import android.util.Log;
 import android.widget.Toast;
 
@@ -22,7 +21,7 @@ import net.kdt.pojavlaunch.game.renderer.def.Renderers;
 import net.kdt.pojavlaunch.game.renderer.impl.GLESRenderSpec;
 import net.kdt.pojavlaunch.instances.Instance;
 import net.kdt.pojavlaunch.utils.DownloadUtils;
-import net.kdt.pojavlaunch.utils.lifecycle.LifecycleAwareAlertDialog;
+import net.kdt.pojavlaunch.lifecycle.LifecycleAwareAlertDialog;
 import net.kdt.pojavlaunch.multirt.MultiRTUtils;
 import net.kdt.pojavlaunch.multirt.Runtime;
 import net.kdt.pojavlaunch.prefs.LauncherPreferences;
@@ -36,7 +35,7 @@ import net.kdt.pojavlaunch.utils.JREUtils;
 import net.kdt.pojavlaunch.utils.JSONUtils;
 import net.kdt.pojavlaunch.utils.MCOptionUtils;
 import net.kdt.pojavlaunch.utils.OldVersionsUtils;
-import net.kdt.pojavlaunch.utils.plugins.LibraryPlugin;
+import net.kdt.pojavlaunch.plugins.LibraryPlugin;
 
 import java.io.File;
 import java.io.IOException;
