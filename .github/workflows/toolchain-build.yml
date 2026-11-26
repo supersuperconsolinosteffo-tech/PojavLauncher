@@ -233,6 +233,7 @@ jobs:
 
       - name: Package toolchain, caches, logs and APKs for git transfer
         if: always()
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -293,19 +294,20 @@ jobs:
             echo "noruntime_exit=$(cat /tmp/transfer/payload/logs/build-noruntime.exit 2>/dev/null || echo missing)"
             echo "full_exit=$(cat /tmp/transfer/payload/logs/build-full.exit 2>/dev/null || echo missing)"
           } > transfer-manifest.txt
-          mkdir -p toolchain-transfer/logs toolchain-transfer/metadata toolchain-transfer/parts
-          cp -f transfer.sha256 parts.sha256 transfer-manifest.txt toolchain-transfer/metadata/
-          cp -f /tmp/transfer/payload/metadata/* toolchain-transfer/metadata/
-          cp -f /tmp/transfer/payload/logs/* toolchain-transfer/logs/ 2>/dev/null || true
-          cp -f part_* toolchain-transfer/parts/
           {
             echo "commit-step=package"
             echo "date=$(date -u +%FT%TZ)"
             echo "head=$(git rev-parse HEAD)"
             echo "part_count=$(ls part_* | wc -l)"
             echo "total_size=$(du -sh /tmp/transfer | awk '{print $1}')"
-            git status --short -- toolchain-transfer | head -40
-          } > toolchain-transfer/metadata/package-step.txt
+            git status --short -- toolchain-transfer > /tmp/gitstatus-package.txt || true
+            head -40 /tmp/gitstatus-package.txt || true
+          } > /tmp/transfer/payload/metadata/package-step.txt
+          mkdir -p toolchain-transfer/logs toolchain-transfer/metadata toolchain-transfer/parts
+          cp -f transfer.sha256 parts.sha256 transfer-manifest.txt toolchain-transfer/metadata/
+          cp -f /tmp/transfer/payload/metadata/* toolchain-transfer/metadata/
+          cp -f /tmp/transfer/payload/logs/* toolchain-transfer/logs/ 2>/dev/null || true
+          cp -f part_* toolchain-transfer/parts/
           echo "packed $(ls part_* | wc -l) parts, total $(du -sh /tmp/transfer | awk '{print $1}')"
 
       - name: Commit logs and verification metadata to active branch
@@ -313,6 +315,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p toolchain-transfer/logs toolchain-transfer/metadata toolchain-transfer/parts
+          cp -f sdkmanager-version.txt sdkmanager-install.log sdk-installed.txt gradle-version.txt gradle-checksum.txt gradle-unzip-test.txt \
+                toolchain-manifest.txt static-verify.log gradle-tasks.log gradle-apk-tasks.txt \
+                build-noruntime.log build-noruntime.exit build-full.log build-full.exit \
+                apk-list.txt apk-verify.txt toolchain-transfer/logs/ 2>/dev/null || true
+          cp -f /tmp/transfer/payload/metadata/* toolchain-transfer/metadata/ 2>/dev/null || true
+          cp -f /tmp/transfer/transfer.sha256 /tmp/transfer/parts.sha256 /tmp/transfer/transfer-manifest.txt toolchain-transfer/metadata/ 2>/dev/null || true
+          {
+            echo "commit-step=logs"
+            echo "date=$(date -u +%FT%TZ)"
+            echo "head_before=$(git rev-parse HEAD)"
+            echo "noruntime_exit=$(cat build-noruntime.exit 2>/dev/null || echo missing)"
+            echo "full_exit=$(cat build-full.exit 2>/dev/null || echo missing)"
+            git status --short -- toolchain-transfer > /tmp/gitstatus-logs.txt || true
+            echo "-- status before add --"
+            head -40 /tmp/gitstatus-logs.txt || true
+          } > toolchain-transfer/metadata/commit-logs-step.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config http.postBuffer 524288000
@@ -331,6 +350,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p toolchain-transfer/parts
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config http.postBuffer 524288000
