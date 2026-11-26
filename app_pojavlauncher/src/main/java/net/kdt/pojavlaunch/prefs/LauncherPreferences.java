@@ -83,7 +83,6 @@ public class LauncherPreferences {
     public static void loadPreferences(Context ctx) {
         //Required for CTRLDEF_FILE and MultiRT
         Tools.initStorageConstants(ctx);
-        boolean isDevicePowerful = isDevicePowerful(ctx);
 
         PREF_RENDERER = DEFAULT_PREF.getString("renderer", "opengles2");
         PREF_BUTTONSIZE = DEFAULT_PREF.getInt("buttonscale", 100);
@@ -95,27 +94,33 @@ public class LauncherPreferences {
         PREF_FORCE_ENGLISH = DEFAULT_PREF.getBoolean("force_english", false);
         PREF_DISABLE_GESTURES = DEFAULT_PREF.getBoolean("disableGestures",false);
         PREF_DISABLE_SWAP_HAND = DEFAULT_PREF.getBoolean("disableDoubleTap", false);
-        PREF_RAM_ALLOCATION = DEFAULT_PREF.getInt("allocation", findBestRAMAllocation(ctx));
+        PREF_RAM_ALLOCATION = DEFAULT_PREF.contains("allocation")
+                ? DEFAULT_PREF.getInt("allocation", 0)
+                : findBestRAMAllocation(ctx);
         PREF_CUSTOM_JAVA_ARGS = DEFAULT_PREF.getString("javaArgs", "");
-        PREF_SUSTAINED_PERFORMANCE = DEFAULT_PREF.getBoolean("sustainedPerformance", isDevicePowerful);
+        PREF_SUSTAINED_PERFORMANCE = getDeviceDependentBoolean(ctx, "sustainedPerformance");
         PREF_VIRTUAL_MOUSE_START = DEFAULT_PREF.getBoolean("mouse_start", false);
-        PREF_USE_ALTERNATE_SURFACE = DEFAULT_PREF.getBoolean("alternate_surface", isDevicePowerful);
+        PREF_USE_ALTERNATE_SURFACE = getDeviceDependentBoolean(ctx, "alternate_surface");
         PREF_JAVA_SANDBOX = DEFAULT_PREF.getBoolean("java_sandbox", true);
-        PREF_SCALE_FACTOR = DEFAULT_PREF.getInt("resolutionRatio", findBestResolution(ctx, isDevicePowerful))/100f;
+        PREF_SCALE_FACTOR = (DEFAULT_PREF.contains("resolutionRatio")
+                ? DEFAULT_PREF.getInt("resolutionRatio", 100)
+                : findBestResolution(ctx, isDevicePowerful(ctx)))/100f;
         PREF_ENABLE_GYRO = DEFAULT_PREF.getBoolean("enableGyro", false);
         PREF_GYRO_SENSITIVITY = ((float)DEFAULT_PREF.getInt("gyroSensitivity", 100))/100f;
         PREF_GYRO_SAMPLE_RATE = DEFAULT_PREF.getInt("gyroSampleRate", 16);
         PREF_GYRO_SMOOTHING = DEFAULT_PREF.getBoolean("gyroSmoothing", true);
         PREF_GYRO_INVERT_X = DEFAULT_PREF.getBoolean("gyroInvertX", false);
         PREF_GYRO_INVERT_Y = DEFAULT_PREF.getBoolean("gyroInvertY", false);
-        PREF_FORCE_VSYNC = DEFAULT_PREF.getBoolean("force_vsync", isDevicePowerful);
+        PREF_FORCE_VSYNC = getDeviceDependentBoolean(ctx, "force_vsync");
         PREF_USE_ANGLE = DEFAULT_PREF.getBoolean("use_angle", false);
         PREF_USE_SYSTEM_ANGLE = DEFAULT_PREF.getBoolean("use_system_angle", false);
         PREF_BUTTON_ALL_CAPS = DEFAULT_PREF.getBoolean("buttonAllCaps", true);
         PREF_DUMP_SHADERS = DEFAULT_PREF.getBoolean("dump_shaders", false);
         PREF_DEADZONE_SCALE = ((float) DEFAULT_PREF.getInt("gamepad_deadzone_scale", 100))/100f;
         PREF_BIG_CORE_AFFINITY = DEFAULT_PREF.getBoolean("bigCoreAffinity", false);
-        PREF_ZINK_PREFER_SYSTEM_DRIVER = DEFAULT_PREF.getBoolean("zinkPreferSystemDriver", !hasVulkanDrivers());
+        PREF_ZINK_PREFER_SYSTEM_DRIVER = DEFAULT_PREF.contains("zinkPreferSystemDriver")
+                ? DEFAULT_PREF.getBoolean("zinkPreferSystemDriver", false)
+                : !hasVulkanDrivers();
         PREF_DOWNLOAD_SOURCE = DEFAULT_PREF.getString("downloadSource", "default");
         PREF_VERIFY_MANIFEST = DEFAULT_PREF.getBoolean("verifyManifest", true);
         PREF_SKIP_NOTIFICATION_PERMISSION_CHECK = DEFAULT_PREF.getBoolean(PREF_KEY_SKIP_NOTIFICATION_CHECK, false);
@@ -149,6 +154,15 @@ public class LauncherPreferences {
             PREF_DEFAULT_RUNTIME = MultiRTUtils.getRuntimes().get(0).name;
             LauncherPreferences.DEFAULT_PREF.edit().putString("defaultRuntime",LauncherPreferences.PREF_DEFAULT_RUNTIME).apply();
         }
+    }
+
+    /** Device capabilities do not change while the process is alive. */
+    private static Boolean sDevicePowerful;
+
+    /** Avoid recomputing device defaults for keys that are already stored. */
+    private static boolean getDeviceDependentBoolean(Context ctx, String key) {
+        if(DEFAULT_PREF.contains(key)) return DEFAULT_PREF.getBoolean(key, false);
+        return isDevicePowerful(ctx);
     }
 
     /**
@@ -193,6 +207,12 @@ public class LauncherPreferences {
     /// Check if the device is considered powerful.
     /// Powerful devices will have some energy saving tweaks enabled by default
     private static boolean isDevicePowerful(Context context) {
+        if(sDevicePowerful != null) return sDevicePowerful;
+        sDevicePowerful = queryIsDevicePowerful(context);
+        return sDevicePowerful;
+    }
+
+    private static boolean queryIsDevicePowerful(Context context) {
         if (SDK_INT < Build.VERSION_CODES.Q) return false;
         if (Tools.getTotalDeviceMemory(context) <= 4096) return false;
         DisplayMetrics metrics = context.getResources().getDisplayMetrics();
@@ -231,7 +251,10 @@ public class LauncherPreferences {
         }
     }
 
+    private static Boolean sHasVulkanDrivers;
+
     public static boolean hasVulkanDrivers() {
-        return GpuUtils.getGlInfo().isAdreno();
+        if(sHasVulkanDrivers == null) sHasVulkanDrivers = GpuUtils.getGlInfo().isAdreno();
+        return sHasVulkanDrivers;
     }
 }

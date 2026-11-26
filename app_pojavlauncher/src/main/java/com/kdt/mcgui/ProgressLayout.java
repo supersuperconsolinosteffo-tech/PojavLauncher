@@ -73,6 +73,7 @@ public class ProgressLayout extends ConstraintLayout implements View.OnClickList
         for(LayoutProgressListener progressListener : mMap) {
             ProgressKeeper.removeListener(progressListener.progressKey, progressListener);
         }
+        mMap.clear();
     }
 
     public boolean hasProcesses(){

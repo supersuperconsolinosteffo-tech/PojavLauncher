@@ -36,7 +36,17 @@ import net.kdt.pojavlaunch.R;
 
 public class PojavApplication extends Application {
 	public static final String CRASH_REPORT_TAG = "PojavCrashReport";
-	public static final ExecutorService sExecutorService = new ThreadPoolExecutor(4, 4, 500, TimeUnit.MILLISECONDS,  new LinkedBlockingQueue<>());
+
+	// Idle threads are released after 30s. The launcher process stays alive while the game
+	// runs in :game, so permanent worker threads would keep their stacks reserved for nothing.
+	public static final ExecutorService sExecutorService = createExecutorService();
+
+	private static ExecutorService createExecutorService() {
+		ThreadPoolExecutor executor = new ThreadPoolExecutor(4, 4, 30, TimeUnit.SECONDS,
+				new LinkedBlockingQueue<>());
+		executor.allowCoreThreadTimeOut(true);
+		return executor;
+	}
 
 	private void installFatalErrorHandler() {
 		Thread.setDefaultUncaughtExceptionHandler((thread, th) -> {

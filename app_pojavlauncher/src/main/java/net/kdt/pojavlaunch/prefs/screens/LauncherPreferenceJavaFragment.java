@@ -2,8 +2,8 @@ package net.kdt.pojavlaunch.prefs.screens;
 
 import static net.kdt.pojavlaunch.Architecture.is32BitsDevice;
 import static net.kdt.pojavlaunch.Tools.getTotalDeviceMemory;
-import static net.kdt.pojavlaunch.Tools.runOnUiThread;
 
+import android.app.ActivityManager;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.SharedPreferences;
@@ -32,9 +32,20 @@ import net.kdt.pojavlaunch.prefs.LauncherPreferences;
 import net.kdt.pojavlaunch.utils.MemoryUtils;
 
 public class LauncherPreferenceJavaFragment extends LauncherPreferenceFragment {
+    // Memory figures do not need a 1 Hz refresh. The loop only runs while the screen is resumed.
+    private static final long MEMORY_REFRESH_INTERVAL_MS = 2000L;
+
     private EditText mSetJavaMemory;
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
-    private Runnable memoryUpdater;
+    private final Runnable memoryUpdater = new Runnable() {
+        @Override
+        public void run() {
+            if (!isAdded() || mMemorySeek == null) return;
+            updateMemoryInfo(requireContext(), mMemorySeek);
+            uiHandler.postDelayed(this, MEMORY_REFRESH_INTERVAL_MS);
+        }
+    };
+    private CustomSeekBarPreference mMemorySeek;
     private MultiRTConfigDialog mDialogScreen;
     private final ActivityResultLauncher<Object> mVmInstallLauncher =
             registerForActivityResult(new OpenDocumentWithExtension("xz"), (data)->{
@@ -48,6 +59,7 @@ public class LauncherPreferenceJavaFragment extends LauncherPreferenceFragment {
 
         CustomSeekBarPreference seek7 = requirePreference("allocation",
                 CustomSeekBarPreference.class);
+        mMemorySeek = seek7;
 
         int maxRAM;
         int deviceRam = getTotalDeviceMemory(seek7.getContext());
@@ -59,17 +71,6 @@ public class LauncherPreferenceJavaFragment extends LauncherPreferenceFragment {
         seek7.setValue(ramAllocation);
         seek7.setSuffix(" MB");
         seek7.setSelectable(true);
-
-        memoryUpdater = new Runnable() {
-            @Override
-            public void run() {
-                if (isAdded()) {
-                    updateMemoryInfo(requireContext(), seek7);
-                    uiHandler.postDelayed(this, 1000);
-                }
-            }
-        };
-        uiHandler.post(memoryUpdater);
 
         seek7.setOnPreferenceClickListener(preference -> {
             setMemoryAllocationDialog(seek7, ramAllocation, maxRAM);
@@ -95,35 +96,47 @@ public class LauncherPreferenceJavaFragment extends LauncherPreferenceFragment {
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        uiHandler.removeCallbacks(memoryUpdater);
+        uiHandler.post(memoryUpdater);
+    }
+
+    @Override
+    public void onPause() {
+        uiHandler.removeCallbacks(memoryUpdater);
+        super.onPause();
+    }
+
+    @Override
     public void onDestroy() {
         uiHandler.removeCallbacks(memoryUpdater);
         super.onDestroy();
     }
 
     private void updateMemoryInfo(Context context, CustomSeekBarPreference seek) {
+        ActivityManager.MemoryInfo memInfo = MemoryUtils.getMemoryInfo(context);
         long seekValue = (long) seek.getValue() * 1024 * 1024;
-        long freeDeviceMemory = MemoryUtils.getFreeDeviceMemory(context);
 
-        boolean isMemorySizeExceeded = seekValue > freeDeviceMemory;
+        boolean isMemorySizeExceeded = seekValue > memInfo.availMem;
 
         String summary = getString(R.string.setting_java_memory_desc);
-        summary += "\r\n" + getMemoryInfoText(context, freeDeviceMemory);
+        summary += "\r\n" + getMemoryInfoText(context, memInfo);
         if (isMemorySizeExceeded) summary += "\r\n" + getString(R.string.setting_java_memory_exceeded);
 
-        String finalSummary = summary;
-        runOnUiThread(() -> seek.setSummary(finalSummary));
+        seek.setSummary(summary);
     }
 
     private String getMemoryInfoText(Context context) {
-        return getMemoryInfoText(context, MemoryUtils.getFreeDeviceMemory(context));
+        return getMemoryInfoText(context, MemoryUtils.getMemoryInfo(context));
     }
 
-    private String getMemoryInfoText(Context context, long freeDeviceMemory) {
+    private String getMemoryInfoText(Context context, ActivityManager.MemoryInfo memInfo) {
         return getString(
                 R.string.setting_java_memory_info,
-                Tools.formatFileSize(MemoryUtils.getUsedDeviceMemory(context)),
-                Tools.formatFileSize(MemoryUtils.getTotalDeviceMemory(context)),
-                Tools.formatFileSize(freeDeviceMemory)
+                Tools.formatFileSize(memInfo.totalMem - memInfo.availMem),
+                Tools.formatFileSize(memInfo.totalMem),
+                Tools.formatFileSize(memInfo.availMem)
         );
     }
 

@@ -63,8 +63,10 @@ public class ProgressKeeper {
     }
 
     public static synchronized void removeListener(String progressRecord, ProgressListener listener) {
-        List<ProgressListener> listenerWeakReferenceList = sProgressListeners.get(progressRecord);
-        if(listenerWeakReferenceList != null) listenerWeakReferenceList.remove(listener);
+        List<ProgressListener> listeners = sProgressListeners.get(progressRecord);
+        if(listeners == null) return;
+        listeners.remove(listener);
+        if(listeners.isEmpty()) sProgressListeners.remove(progressRecord);
     }
 
     public static void addTaskCountListener(TaskCountListener listener) {

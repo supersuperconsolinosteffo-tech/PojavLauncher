@@ -19,14 +19,17 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public class ModIconCache {
-    ThreadPoolExecutor cacheLoaderPool = new ThreadPoolExecutor(10,
-            10,
-            1000,
-            TimeUnit.MILLISECONDS,
+    // Two workers are enough for on-screen icons. Core threads used to stay alive for the
+    // whole lifetime of the adapter, keeping ten idle thread stacks in the launcher process.
+    private final ThreadPoolExecutor cacheLoaderPool = new ThreadPoolExecutor(2,
+            2,
+            30,
+            TimeUnit.SECONDS,
             new LinkedBlockingQueue<>());
     File cachePath;
     private final List<WeakReference<ImageReceiver>> mCancelledReceivers = new ArrayList<>();
     public ModIconCache() {
+        cacheLoaderPool.allowCoreThreadTimeOut(true);
         cachePath = getImageCachePath();
         if(!FileUtils.ensureDirectorySilently(cachePath)) {
                 throw new RuntimeException("Failed to create icon cache directory");
