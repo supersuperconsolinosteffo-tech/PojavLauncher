@@ -166,14 +166,18 @@ public class ProgressLayout extends ConstraintLayout implements View.OnClickList
                 Log.i("ProgressLayout", "onProgressStarted");
                 if(!isAttached) mLinearLayout.addView(textView, params);
                 isAttached = true;
+                // A new task may start with the same values as the previous one ended with.
+                mLastProgress = -1;
+                mLastText = null;
             });
         }
 
         @Override
         public void onProgressUpdated(int progress, int resid, Object... va) {
+            final Object[] args = va == null ? new Object[0] : va;
             final String text;
-            if(resid != -1) text = getContext().getString(resid, va);
-            else if(va != null && va.length > 0 && va[0] != null) text = (String)va[0];
+            if(resid != -1) text = getContext().getString(resid, args);
+            else if(args.length > 0 && args[0] != null) text = (String)args[0];
             else text = "";
             post(()-> {
                 // Skip layout invalidations when a download reports the same values again.
@@ -193,6 +197,8 @@ public class ProgressLayout extends ConstraintLayout implements View.OnClickList
             post(()-> {
                 mLinearLayout.removeView(textView);
                 isAttached = false;
+                mLastProgress = -1;
+                mLastText = null;
             });
         }
     }

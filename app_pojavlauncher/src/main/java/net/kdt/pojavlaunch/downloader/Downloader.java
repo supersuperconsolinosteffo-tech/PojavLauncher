@@ -1,5 +1,7 @@
 package net.kdt.pojavlaunch.downloader;
 
+import android.os.SystemClock;
+
 import com.kdt.mcgui.ProgressLayout;
 
 import net.kdt.pojavlaunch.Tools;
@@ -83,17 +85,24 @@ public class Downloader {
         }
         double totalMegabytes = totalSize / ONE_MEGABYTE;
         long progressIntervalMs = PerformanceProfile.getProgressIntervalMs();
-        long lastReportTime = 0L;
+        // elapsedRealtime() is monotonic; wall-clock changes must not stall progress reporting.
+        long lastReportTime = -1L;
         while(mDownloadedFileCounter.get() < totalCount) {
             IOException exception = mThreadException.get();
             if(exception != null) throw exception;
-            long now = System.currentTimeMillis();
-            if(lastReportTime == 0L || now - lastReportTime >= progressIntervalMs) {
+            long now = SystemClock.elapsedRealtime();
+            if(lastReportTime < 0L || now - lastReportTime >= progressIntervalMs) {
                 if(sizeCounter) reportSizeProgress(totalMegabytes);
                 else reportCountProgress(R.string.newerdl_downloading_files_count, totalCount);
                 lastReportTime = now;
             }
             Thread.sleep(progressIntervalMs);
+        }
+        // The last loop tick can be up to one interval old; report the completed state before
+        // the caller clears the progress line. Avoid a bogus line for an empty download list.
+        if(totalCount > 0) {
+            if(sizeCounter) reportSizeProgress(totalMegabytes);
+            else reportCountProgress(R.string.newerdl_downloading_files_count, totalCount);
         }
         mDownloadService.shutdown();
         mVerifyService.shutdown();

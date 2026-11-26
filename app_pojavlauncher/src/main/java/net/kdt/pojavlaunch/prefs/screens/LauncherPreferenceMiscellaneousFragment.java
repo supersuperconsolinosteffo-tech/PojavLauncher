@@ -2,6 +2,7 @@ package net.kdt.pojavlaunch.prefs.screens;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.widget.Toast;
@@ -85,6 +86,14 @@ public class LauncherPreferenceMiscellaneousFragment extends LauncherPreferenceF
             Toast.makeText(getContext(), R.string.perf_profile_applied, Toast.LENGTH_SHORT).show();
             return true;
         });
+    }
+
+    @Override
+    public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
+        super.onSharedPreferenceChanged(sharedPreferences, key);
+        // The Custom switches must become enabled/disabled as soon as the profile changes,
+        // without waiting for the fragment to be resumed again.
+        if (PerformanceProfile.KEY_PROFILE.equals(key)) updateVisibility();
     }
 
     private void setupMicrophoneRequestPreference() {

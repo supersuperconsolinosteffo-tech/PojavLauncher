@@ -44,26 +44,30 @@ public final class PerformanceProfile {
         return PROFILE_BALANCED;
     }
 
-    private static boolean isEnabled(String key) {
+    /**
+     * Reads an optional switch. Ultra-Lite only enables the three resource switches; logcat
+     * capture is deliberately left alone there and is controlled by Custom only.
+     */
+    private static boolean isEnabled(String key, boolean ultraLiteDefault) {
         SharedPreferences prefs = prefs();
         if (prefs == null) return false;
         String profile = getProfile();
-        if (PROFILE_ULTRA_LITE.equals(profile)) return true;
+        if (PROFILE_ULTRA_LITE.equals(profile)) return ultraLiteDefault;
         if (PROFILE_CUSTOM.equals(profile)) return prefs.getBoolean(key, false);
         return false;
     }
 
     /** Skips the icon cache scan at launcher start; the scan still runs when mods are browsed. */
     public static boolean useMinimalBackgroundWork() {
-        return isEnabled(KEY_MINIMAL_BACKGROUND);
+        return isEnabled(KEY_MINIMAL_BACKGROUND, true);
     }
 
     public static boolean useSmallIconCache() {
-        return isEnabled(KEY_SMALL_ICON_CACHE);
+        return isEnabled(KEY_SMALL_ICON_CACHE, true);
     }
 
     public static boolean useLowProgressRate() {
-        return isEnabled(KEY_LOW_PROGRESS_RATE);
+        return isEnabled(KEY_LOW_PROGRESS_RATE, true);
     }
 
     /** Custom only. Disabling logcat capture leaves just the launcher lines in latestlog.txt. */
@@ -92,6 +96,7 @@ public final class PerformanceProfile {
     /**
      * A conservative heap suggestion for the existing "allocation" preference. It leaves room
      * for Android, native drivers and the launcher itself, and is never applied automatically.
+     * The result is clamped to the same range as the Java settings seek bar.
      */
     public static int getRecommendedHeapMb(Context context) {
         DeviceInfo info = DeviceInfo.detect(context);
@@ -99,9 +104,16 @@ public final class PerformanceProfile {
         if (total <= 0) return 1024;
         int byTotal = (int) (total * 0.30f);
         int recommended = Math.max(512, Math.min(1536, byTotal));
-        int byAvailable = Math.max(512, info.availableRamMb - 512);
+        int byAvailable = Math.max(256, info.availableRamMb - 512);
         recommended = Math.min(recommended, byAvailable);
         if (info.is32Bit) recommended = Math.min(recommended, 696);
+
+        // Same bound as LauncherPreferenceJavaFragment, so setValue() cannot go out of range.
+        int seekMax;
+        if (info.is32Bit || total < 2048) seekMax = Math.min(1024, total);
+        else seekMax = total - (total < 3064 ? 800 : 1024);
+        seekMax = Math.max(256, seekMax);
+        recommended = Math.min(recommended, seekMax);
         return Math.max(256, recommended);
     }
 
@@ -161,13 +173,16 @@ public final class PerformanceProfile {
 
         /**
          * Devices with the same total RAM can behave differently, so available memory, address
-         * space and core count are taken into account too. This is a suggestion only.
+         * space and core count are taken into account too. A failed memory read (zero values)
+         * must not be mistaken for a low-RAM device. This is a suggestion only.
          */
         public String suggestProfile() {
             if (totalRamMb > 0 && totalRamMb <= 4096) return PROFILE_ULTRA_LITE;
-            if (availableRamMb >= 0 && availableRamMb < 1200) return PROFILE_ULTRA_LITE;
+            if (totalRamMb > 0 && availableRamMb < 1200) return PROFILE_ULTRA_LITE;
             if (is32Bit) return PROFILE_ULTRA_LITE;
-            if (cpuCores > 0 && cpuCores <= 4) return PROFILE_ULTRA_LITE;
+            if (totalRamMb > 0 && totalRamMb <= 6144 && cpuCores > 0 && cpuCores <= 4) {
+                return PROFILE_ULTRA_LITE;
+            }
             return PROFILE_BALANCED;
         }
 
