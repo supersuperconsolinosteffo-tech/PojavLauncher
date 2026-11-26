@@ -8,9 +8,10 @@ Remotes: `origin` -> `https://github.com/supersuperconsolinosteffo-tech/PojavLau
 
 > Branch note: this environment fixes the session to the branch above and does not allow
 > creating or switching branches. The requested `ultra-lite-optimization` branch cannot be
-> created here. All work is committed in logical phases on the current branch, and no push to
-> the default branch is performed. The fork's `origin` remote is left untouched, so pulling
-> future upstream changes remains possible.
+> created here. All work is committed in logical phases on the current branch and was later
+> pushed to `origin/arena/7535fc36-pojavlauncher`; no push to the default branch is performed.
+> The fork's `origin` remote is left untouched, so pulling future upstream changes remains
+> possible.
 
 ## 1. What this codebase is
 

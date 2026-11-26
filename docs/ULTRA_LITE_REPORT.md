@@ -8,8 +8,8 @@ Static verification: `python3 scripts/verify_static.py`
 
 > **Branch and push.** This environment fixes the session to the branch above; it does not
 > allow creating or switching branches, so the requested `ultra-lite-optimization` branch
-> could not be created here. All eight commits are on the current branch, none of them touches
-> `v3_openjdk`, and no push was performed. The `origin` remote
+> could not be created here. All nine commits are on the current branch and were pushed to
+> `origin/arena/7535fc36-pojavlauncher`. `v3_openjdk` was not modified. The `origin` remote
 > (`https://github.com/supersuperconsolinosteffo-tech/PojavLauncher.git`) is unchanged, so
 > upstream synchronization still works. To get the requested name, create it from this branch
 > locally and push it yourself (see build instructions below).
@@ -337,7 +337,7 @@ hashes in section G.
 
 ## G. Git history
 
-Eight commits on `arena/7535fc36-pojavlauncher`, logically grouped by phase, following the
+Nine commits on `arena/7535fc36-pojavlauncher`, logically grouped by phase, following the
 project's `Upd/Fix/Feat[what_changed]: description` convention:
 
 | Commit | Phase |
@@ -349,7 +349,8 @@ project's `Upd/Fix/Feat[what_changed]: description` convention:
 | `5166da5` | `Feat[prefs]: add optional Balanced/Ultra-Lite/Custom performance profiles` |
 | `885aef0` | `Upd[ui]: avoid duplicate fragment callbacks and redundant progress view updates` |
 | `21c8b99` | `Upd[docs]: add final Ultra-Lite change, compatibility and measurement report` |
-| HEAD | `Upd[runtime,docs]: guard progress varargs and finalize Ultra-Lite report` |
+| `1eea90f` | `Upd[runtime,docs]: guard progress varargs and finalize Ultra-Lite report` |
+| HEAD | `Upd[docs]: record GitHub push status in report` |
 
 `git status` is clean. The working tree was clean before work started, so no user changes were
 overwritten. `git diff --stat 5431df4..HEAD` lists the full changeset (about 104 files,
