@@ -22,7 +22,8 @@ import java.util.concurrent.TimeUnit;
 public class ModIconCache {
     // Two workers are enough for on-screen icons. Core threads used to stay alive for the
     // whole lifetime of the adapter, keeping ten idle thread stacks in the launcher process.
-    private final ThreadPoolExecutor cacheLoaderPool = new ThreadPoolExecutor(
+    // Package-visible: ReadFromDiskTask and DownloadImageTask reschedule work on this pool.
+    final ThreadPoolExecutor cacheLoaderPool = new ThreadPoolExecutor(
             PerformanceProfile.getIconLoaderThreads(),
             PerformanceProfile.getIconLoaderThreads(),
             30,

@@ -142,13 +142,8 @@ class MobileGluesMultidrawOrderFragment : Fragment(R.layout.fragment_mg_multidra
 
         override fun onMove(rv: RecyclerView, from: RecyclerView.ViewHolder, to: RecyclerView.ViewHolder): Boolean {
             if (!dragEnabled) return false
-            // RecyclerView versions used by this project expose the deprecated adapterPosition
-            // property but not bindingAdapterPosition. It returns NO_POSITION while an item is
-            // being removed, which is already handled below.
-            @Suppress("DEPRECATION")
-            val fromPos = from.adapterPosition
-            @Suppress("DEPRECATION")
-            val toPos = to.adapterPosition
+            val fromPos = from.bindingAdapterPosition
+            val toPos = to.bindingAdapterPosition
             if (fromPos == RecyclerView.NO_POSITION || toPos == RecyclerView.NO_POSITION) return false
             rows.add(toPos, rows.removeAt(fromPos))
             adapter.notifyItemMoved(fromPos, toPos)
