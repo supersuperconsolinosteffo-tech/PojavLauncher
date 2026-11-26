@@ -32,9 +32,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: arena/7535fc36-pojavlauncher
-          fetch-depth: 0
+          fetch-depth: 1
           submodules: recursive
           persist-credentials: true
+          sparse-checkout: |
+            /*
+            !/toolchain-transfer/
+          sparse-checkout-cone-mode: false
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -231,29 +235,46 @@ jobs:
               -storepass android -alias androiddebugkey 2>/dev/null | grep -E 'Alias name|Owner|SHA256|MD5|Valid from' || true
           } | tee apk-verify.txt
 
-      - name: Copy diagnostics and APKs for transfer
+      - name: Copy diagnostics and split APKs into verified transfer parts
         if: always()
         shell: bash
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE"
-          mkdir -p toolchain-transfer/logs toolchain-transfer/metadata toolchain-transfer/apks
+          rm -rf apk-transfer
+          mkdir -p apk-transfer/logs apk-transfer/metadata apk-transfer/parts
           cp -f sdkmanager-version.txt sdkmanager-install.log sdk-installed.txt gradle-version.txt gradle-checksum.txt gradle-unzip-test.txt \
                 toolchain-manifest.txt static-verify.log gradle-tasks.log gradle-apk-tasks.txt \
                 build-noruntime.log build-noruntime.exit build-full.log build-full.exit \
-                apk-list.txt apk-verify.txt toolchain-transfer/logs/ 2>/dev/null || true
-          find app_pojavlauncher/build/outputs -type f -name '*.apk' -exec cp -f --parents {} toolchain-transfer/apks/ \; 2>/dev/null || true
+                apk-list.txt apk-verify.txt apk-transfer/logs/ 2>/dev/null || true
+          : > apk-transfer/metadata/apk-manifest.tsv
+          apk_count=0
+          while IFS= read -r apk; do
+            [ -f "$apk" ] || continue
+            name="$(basename "$apk")"
+            size="$(stat -c%s "$apk")"
+            sha="$(sha256sum "$apk" | awk '{print $1}')"
+            count="$(split -b 16m -d -a 4 "$apk" "apk-transfer/parts/${name}.part_" | wc -l)"
+            # split does not print part names; count them from disk.
+            count="$(find apk-transfer/parts -maxdepth 1 -type f -name "${name}.part_*" | wc -l)"
+            printf '%s\t%s\t%s\t%s\n' "$name" "$size" "$sha" "$count" >> apk-transfer/metadata/apk-manifest.tsv
+            apk_count=$((apk_count+1))
+          done < <(find app_pojavlauncher/build/outputs -type f -name '*.apk' 2>/dev/null | sort)
+          (cd apk-transfer/parts && sha256sum ./* > ../metadata/parts.sha256 2>/dev/null || true)
           {
             echo "date=$(date -u +%FT%TZ)"
             echo "commit=$(git rev-parse HEAD)"
             echo "noruntime_exit=$(cat build-noruntime.exit 2>/dev/null || echo missing)"
             echo "full_exit=$(cat build-full.exit 2>/dev/null || echo missing)"
-            echo "apk_files=$(find toolchain-transfer/apks -type f -name '*.apk' 2>/dev/null | wc -l)"
+            echo "apk_count=$apk_count"
+            echo "part_count=$(find apk-transfer/parts -type f | wc -l)"
+            echo "part_size_bytes=16777216"
             echo "gradle_sha256=$(sha256sum /tmp/gradle-official/gradle-8.14.5-bin.zip 2>/dev/null | awk '{print $1}' || true)"
-          } > toolchain-transfer/metadata/run-manifest.txt
-          cat toolchain-transfer/metadata/run-manifest.txt
+          } > apk-transfer/metadata/run-manifest.txt
+          cat apk-transfer/metadata/run-manifest.txt
+          cat apk-transfer/metadata/apk-manifest.tsv
 
-      - name: Commit diagnostics and APKs to active branch
+      - name: Commit diagnostics and APK transfer parts to active branch
         if: always()
         shell: bash
         run: |
@@ -262,17 +283,24 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config http.postBuffer 524288000
-          mkdir -p toolchain-transfer/logs toolchain-transfer/metadata toolchain-transfer/apks
-          # Stage directories that actually have files; git add errors on an empty untracked path.
-          for d in toolchain-transfer/logs toolchain-transfer/metadata toolchain-transfer/apks; do
-            if [ -n "$(find "$d" -mindepth 1 -print -quit 2>/dev/null)" ]; then
-              git add -A "$d"
+          git add -A apk-transfer/logs apk-transfer/metadata
+          if git diff --cached --quiet; then
+            echo "nothing to commit for diagnostics"
+          else
+            git commit -m "CI[apk]: publish build diagnostics and APK manifest"
+            git push --porcelain origin HEAD:refs/heads/arena/7535fc36-pojavlauncher
+          fi
+          shopt -s nullglob
+          parts=(apk-transfer/parts/*)
+          echo "publishing ${#parts[@]} APK parts in batches of 4"
+          batch=0
+          for ((i=0; i<${#parts[@]}; i+=4)); do
+            batch=$((batch+1))
+            chunk=("${parts[@]:i:4}")
+            git add -- "${chunk[@]}"
+            if ! git diff --cached --quiet; then
+              git commit -m "CI[apk]: publish APK parts batch $batch"
+              git push --porcelain origin HEAD:refs/heads/arena/7535fc36-pojavlauncher
             fi
           done
-          if git diff --cached --quiet; then
-            echo "nothing to commit for diagnostics/APKs"
-          else
-            git commit -m "CI[apk]: publish build diagnostics and generated APKs"
-          fi
           echo "local_head=$(git rev-parse HEAD)"
-          git push --porcelain origin HEAD:refs/heads/arena/7535fc36-pojavlauncher
