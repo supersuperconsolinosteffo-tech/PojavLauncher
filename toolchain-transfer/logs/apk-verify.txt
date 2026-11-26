@@ -1,0 +1,10 @@
+=== APK verification ===
+build-noruntime exit=1
+build-full exit=1
+
+-- debug keystore fingerprint --
+Alias name: androiddebugkey
+Owner: CN=Android Debug, O=Android, C=US
+Valid from: Sat Sep 05 10:21:53 UTC 2020 until: Thu Aug 26 10:21:53 UTC 2060
+	 SHA256: D0:D0:88:6A:0D:7E:34:86:E6:62:7F:9B:80:11:02:7F:E3:C6:B0:FB:09:42:45:30:B6:D7:BE:14:F8:C2:CC:33
+Signature algorithm name: SHA256withRSA

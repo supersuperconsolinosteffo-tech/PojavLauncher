@@ -1,0 +1,8 @@
+archive=transfer.tar.gz
+archive_sha256=034ee10e8e20778225abb285ba472a72548dd1d058842621cb8b959a12ca2b48
+part_count=29
+part_size_bytes=67108864
+part_pattern=part_%04d
+parts_sha256=parts.sha256
+noruntime_exit=1
+full_exit=1

@@ -1,0 +1,8 @@
+commit-step=logs
+date=2026-11-26T19:35:36Z
+head_before=37c7ab38407e2da5e6340b850610809c878e2bb2
+noruntime_exit=1
+full_exit=1
+-- status before add --
+?? toolchain-transfer/logs/
+?? toolchain-transfer/metadata/
