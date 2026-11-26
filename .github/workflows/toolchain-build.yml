@@ -293,14 +293,22 @@ jobs:
             echo "noruntime_exit=$(cat /tmp/transfer/payload/logs/build-noruntime.exit 2>/dev/null || echo missing)"
             echo "full_exit=$(cat /tmp/transfer/payload/logs/build-full.exit 2>/dev/null || echo missing)"
           } > transfer-manifest.txt
-          mkdir -p toolchain-transfer/parts
-          cp -f transfer.sha256 parts.sha256 transfer-manifest.txt toolchain-transfer/
-          cp -f /tmp/transfer/payload/metadata/* toolchain-transfer/
-          cp -f /tmp/transfer/payload/logs/* toolchain-transfer/ 2>/dev/null || true
+          mkdir -p toolchain-transfer/logs toolchain-transfer/metadata toolchain-transfer/parts
+          cp -f transfer.sha256 parts.sha256 transfer-manifest.txt toolchain-transfer/metadata/
+          cp -f /tmp/transfer/payload/metadata/* toolchain-transfer/metadata/
+          cp -f /tmp/transfer/payload/logs/* toolchain-transfer/logs/ 2>/dev/null || true
           cp -f part_* toolchain-transfer/parts/
+          {
+            echo "commit-step=package"
+            echo "date=$(date -u +%FT%TZ)"
+            echo "head=$(git rev-parse HEAD)"
+            echo "part_count=$(ls part_* | wc -l)"
+            echo "total_size=$(du -sh /tmp/transfer | awk '{print $1}')"
+            git status --short -- toolchain-transfer | head -40
+          } > toolchain-transfer/metadata/package-step.txt
           echo "packed $(ls part_* | wc -l) parts, total $(du -sh /tmp/transfer | awk '{print $1}')"
 
-      - name: Commit transfer payload to active branch
+      - name: Commit logs and verification metadata to active branch
         if: always()
         shell: bash
         run: |
@@ -308,7 +316,29 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config http.postBuffer 524288000
-          git add toolchain-transfer
-          git commit -m "CI[toolchain]: publish verified build transfer payload" || echo "nothing to commit"
-          git pull --rebase origin arena/7535fc36-pojavlauncher || true
-          git push origin HEAD:arena/7535fc36-pojavlauncher
+          git add -A toolchain-transfer/logs toolchain-transfer/metadata
+          if git diff --cached --quiet; then
+            echo "nothing to commit for logs/metadata"
+          else
+            git commit -m "CI[logs]: publish build and verification diagnostics"
+          fi
+          echo "local_head_after_log_commit=$(git rev-parse HEAD)"
+          git push --porcelain origin HEAD:refs/heads/arena/7535fc36-pojavlauncher
+
+      - name: Commit large toolchain payload to active branch
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config http.postBuffer 524288000
+          git add -A toolchain-transfer/parts
+          if git diff --cached --quiet; then
+            echo "nothing to commit for payload parts"
+          else
+            git commit -m "CI[payload]: publish verified toolchain and APK archive parts"
+          fi
+          echo "local_head_after_payload_commit=$(git rev-parse HEAD)"
+          git push --porcelain origin HEAD:refs/heads/arena/7535fc36-pojavlauncher
