@@ -192,11 +192,16 @@ tag stays unidentifiable and is never reported as Krypton, never as GL4ES either
 
 **Selection policy on Krypton:**
 
-- Sodium is withheld. The wrapper advertises desktop OpenGL 3.1, which is below the core-profile
-  path Sodium's rendering backend uses, and neither this repository nor the launcher's own checks
-  establish the combination. "Neither guarded nor validated" is treated as unvalidated, not as
-  permitted. Skipping is reported with the reason and the advertised version, on the mod row and
-  in the notes.
+- Sodium is withheld, on two independent grounds. First, Sodium's own project documentation states
+  that "Android devices (and some Windows-on-ARM devices) which use OpenGL translation layers (such
+  as GL4ES, ANGLE, GLonD3D12 etc) are not supported and will have severe performance issues" -
+  Krypton Wrapper is a modified GL4ES, i.e. exactly that class of layer. Second, this launcher's
+  spec pins emulated desktop OpenGL 3.1 (`LIBGL_GL=31`), below the 3.3 core profile that modern
+  Minecraft and Sodium target. Neither this repository nor `GameRunner` validates the combination
+  either - the launcher's GL4ES Sodium guard does not extend to this spec - and "neither guarded nor
+  validated" is treated as unvalidated, never as permitted. Skipping is reported with the reason
+  and the advertised version, on the mod row and in the notes. The quoted compatibility statement
+  comes from Sodium's published documentation (consulted 2026-11-27); it is not re-measured here.
 - No other mod is affected: Sodium is the only renderer-gated candidate, asserted by the offline
   suite, so FerriteCore, Lithium, ModernFix, ImmediatelyFast, Entity Culling, More Culling and
   Memory Leak Fix stay subject only to the usual Modrinth/version/loader/dependency/budget rules.

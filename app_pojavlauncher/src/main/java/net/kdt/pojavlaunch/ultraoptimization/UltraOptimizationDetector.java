@@ -179,8 +179,9 @@ public final class UltraOptimizationDetector {
                     + ".NGGL4ESRenderSpec sets LIBGL_GL=31, LIBGL_ES=3 and LIBGL_NORMALIZE=1, so the"
                     + " game sees emulated desktop OpenGL 3.1 on OpenGL ES 3. It is not a subclass of"
                     + " the GL4ES spec, so GameRunner applies neither its Sodium guard nor its"
-                    + " 1.21.4-and-lower cutoff to it - and it does not endorse a desktop-GL 4.x"
-                    + " path either.");
+                    + " 1.21.4-and-lower cutoff to it - and it does not endorse a desktop-GL path"
+                    + " either. Sodium's own documentation excludes OpenGL translation layers of"
+                    + " exactly this kind (GL4ES, ANGLE, ...) from support.");
         }
         if (Renderers.MOBILEGLUES_RENDERER.equals(tag)) {
             return new RendererCapability(renderer, RendererFamily.MOBILEGLUES,
@@ -359,10 +360,12 @@ public final class UltraOptimizationDetector {
         }
         if (capability.isKrypton()) {
             return new RendererPolicy(false, renderer,
-                    "Sodium skipped: Krypton Wrapper (NG-GL4ES) advertises emulated desktop OpenGL 3.1"
-                    + " over OpenGL ES 3, which is below the desktop-GL core path Sodium needs, and"
-                    + " this launcher neither guards nor validates that combination; no renderer"
-                    + " change is made. Non-rendering optimization mods are still offered.",
+                    "Sodium skipped: Krypton Wrapper (NG-GL4ES) is a GL4ES translation layer, which"
+                    + " Sodium's own documentation lists as unsupported, and this spec pins emulated"
+                    + " desktop OpenGL 3.1 over OpenGL ES 3 - below the 3.3 core profile modern"
+                    + " Minecraft and Sodium target. This launcher neither guards nor validates the"
+                    + " combination, so no renderer change is made; non-rendering optimization mods"
+                    + " are still offered.",
                     capability);
         }
         return new RendererPolicy(false, renderer,
