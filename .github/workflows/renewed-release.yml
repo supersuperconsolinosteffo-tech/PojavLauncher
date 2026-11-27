@@ -717,6 +717,28 @@ jobs:
           fi
           [ "$FAIL" -eq 0 ] || exit 1
 
+      - name: Expose the verification report when verification does not pass
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          cd "$GITHUB_WORKSPACE"
+          {
+            echo "=== workspace ==="
+            ls -l
+            echo "=== downloaded-sha256.txt ==="
+            cat downloaded-sha256.txt 2>/dev/null
+            echo "=== apk-metadata-krypton.txt (head 6) ==="
+            head -6 apk-metadata-krypton.txt 2>/dev/null
+            echo "=== release-verification-krypton.txt (head 12) ==="
+            head -12 release-verification-krypton.txt 2>/dev/null
+            echo "=== asset-verification.txt ==="
+            cat asset-verification.txt 2>/dev/null
+          } > /tmp/diagnostic.txt
+          test -s /tmp/diagnostic.txt || echo "the verification step wrote nothing at all" >> /tmp/diagnostic.txt
+          payload=$(head -c 24000 /tmp/diagnostic.txt | awk 'BEGIN{ORS=""} {gsub(/%/,"%25"); if (NR>1) printf "%%0A"; print}')
+          printf '::error title=verification diagnostics::%s\n' "$payload"
+
       - name: Add both APKs to the existing release, keeping every current asset
         if: steps.gate.outputs.enabled == '1'
         env:
