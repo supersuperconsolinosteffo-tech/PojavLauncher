@@ -1,0 +1,352 @@
+name: PojavLauncher Renewed release
+
+# Verification and publication pipeline for the Ultra-Optimization feature branch.
+# It publishes a NEW release (tag pojavlauncher-renewed-<date>) with its own asset names and
+# never touches the previous pojavlauncher-debug-apks-20261126 release.
+
+on:
+  push:
+    branches:
+      - arena/7535fc36-pojavlauncher
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: renewed-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Static verification and offline resolution tests
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout active branch
+        uses: actions/checkout@v4
+        with:
+          ref: arena/7535fc36-pojavlauncher
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Ultra-Lite preservation and Ultra-Optimization safety checks
+        run: python3 scripts/verify_ultra_optimization.py
+
+      - name: Repository-wide static verification
+        run: python3 scripts/verify_static.py
+
+      - name: Ultra-Optimization offline resolution tests (javac --release 8 + java)
+        run: bash scripts/run_ultra_optimization_tests.sh
+
+  release:
+    name: Build, verify and publish the Renewed APKs
+    needs: verify
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      CURSEFORGE_API_KEY: DUMMY
+      JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8
+      RELEASE_TAG: pojavlauncher-renewed-20261126
+      RELEASE_TITLE: PojavLauncher Renewed
+    steps:
+      - name: Checkout active branch
+        uses: actions/checkout@v4
+        with:
+          ref: arena/7535fc36-pojavlauncher
+          fetch-depth: 1
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Locate Android SDK manager
+        id: sdk
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            for candidate in \
+              "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+              "$ANDROID_HOME/cmdline-tools/bin/sdkmanager" \
+              "$ANDROID_HOME/tools/bin/sdkmanager"; do
+              if [ -x "$candidate" ]; then SDKMANAGER="$candidate"; break; fi
+            done
+          fi
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager not found" >&2
+            exit 1
+          fi
+          echo "sdkmanager=$SDKMANAGER" >> "$GITHUB_OUTPUT"
+          "$SDKMANAGER" --version
+
+      - name: Install official Android SDK components
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER='${{ steps.sdk.outputs.sdkmanager }}'
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;35.0.0" \
+            "build-tools;36.0.0" \
+            "ndk;29.0.14206865" \
+            "cmake;3.22.1"
+
+      - name: Set up Gradle 8.14.5
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14.5"
+
+      - name: Build both debug APK variants
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle :app_pojavlauncher:assembleNoruntimeDebug :app_pojavlauncher:assembleFullDebug \
+            --no-daemon --console=plain
+
+      - name: Re-run safety checks against the built tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_ultra_optimization.py
+          python3 - <<'PY'
+          import os
+          # The feature sources must be inside the built APKs' source tree, and no Ultra-Lite
+          # file may have been edited by the build itself.
+          feature = 'app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/ultraoptimization'
+          names = sorted(os.listdir(feature))
+          assert 'UltraOptimizationFragment.java' in names, names
+          assert 'UltraOptimizationInstaller.java' in names, names
+          print('feature sources in build tree:', len(names))
+          PY
+
+      - name: Verify and describe APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          export PATH="$BT:$JAVA_HOME/bin:$PATH"
+          FULL=app_pojavlauncher/build/outputs/apk/full/debug/app_pojavlauncher-full-debug.apk
+          NORUNTIME=app_pojavlauncher/build/outputs/apk/noruntime/debug/app_pojavlauncher-noruntime-debug.apk
+          test -s "$FULL"
+          test -s "$NORUNTIME"
+          cp -f "$FULL" PojavLauncher-Renewed-Full.apk
+          cp -f "$NORUNTIME" PojavLauncher-Renewed-Noruntime.apk
+          gradle --version > gradle-version-full.txt
+          java -version > java-version-full.txt 2>&1
+          {
+            echo "PojavLauncher Renewed - APK verification"
+            echo "date=$(date -u +%FT%TZ)"
+            echo "source_commit=$GITHUB_SHA"
+            echo "branch=$GITHUB_REF_NAME"
+            echo "gradle=$(grep '^Gradle ' gradle-version-full.txt | head -1)"
+            echo "java=$(head -1 java-version-full.txt)"
+            echo "javac=$(javac -version 2>&1)"
+            echo
+            echo "== static verification =="
+            echo "ultra_lite_preservation_and_safety_checks=passed (verify_ultra_optimization.py)"
+            echo "repository_static_verification=passed (verify_static.py)"
+            echo "offline_resolution_tests=passed (scripts/run_ultra_optimization_tests.sh)"
+            echo "  scenarios: Fabric 1.20.1/LTW, Forge 1.20.1/GL4ES, NeoForge 1.21.1/Zink,"
+            echo "  Quilt 1.19.2, Vanilla, shared-data, old runtime, installed detection,"
+            echo "  required-dependency failure, incompatible conflict, exclusive culling group"
+            echo
+            for apk in PojavLauncher-Renewed-Full.apk PojavLauncher-Renewed-Noruntime.apk; do
+              echo "=== $apk ==="
+              echo "size_bytes=$(stat -c%s "$apk")"
+              echo "sha256=$(sha256sum "$apk" | awk '{print $1}')"
+              unzip -t "$apk" >/dev/null
+              echo "zip_integrity=ok"
+              aapt dump badging "$apk" | grep -E '^(package|sdkVersion|targetSdkVersion|native-code|application-label:)' || true
+              apksigner verify "$apk" >/dev/null
+              echo "apksigner_verify=ok"
+              apksigner verify --print-certs "$apk" 2>/dev/null | grep -E 'Signer #1 certificate (DN|SHA-256 digest)' || true
+              zipalign -c -v 4 "$apk" | tail -1
+              echo "abis=$(unzip -l "$apk" | awk '/ lib\/[^\/]+\/.*\.so$/ {split($4,a,"/"); print a[2]}' | sort -u | tr '\n' ' ')"
+              echo
+            done
+            echo "Not performed by CI: installation and runtime testing on a physical Android device,"
+            echo "live Modrinth API queries, and end-to-end mod installation on a device."
+          } | tee release-verification.txt
+
+      - name: Compose release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          FULL_SIZE=$(stat -c%s PojavLauncher-Renewed-Full.apk)
+          FULL_SHA=$(sha256sum PojavLauncher-Renewed-Full.apk | awk '{print $1}')
+          NORUNTIME_SIZE=$(stat -c%s PojavLauncher-Renewed-Noruntime.apk)
+          NORUNTIME_SHA=$(sha256sum PojavLauncher-Renewed-Noruntime.apk | awk '{print $1}')
+          {
+            echo "## PojavLauncher Renewed"
+            echo
+            echo "New in this build: **Ultra-Optimization**, a per-installation mod optimizer. It is a"
+            echo "separate feature with its own screen, its own state and its own lifecycle; the existing"
+            echo "**Ultra-Lite** launcher profile is untouched and keeps working exactly as before."
+            echo
+            echo "### Ultra-Optimization (new)"
+            echo
+            echo "Opens from **Settings -> Categories -> Ultra-Optimization** for the selected installation."
+            echo
+            echo "- Detects the exact Minecraft version and the loader of the selected installation (Fabric,"
+            echo "  Forge, NeoForge, Quilt, or Vanilla) from its version JSON."
+            echo "- Reads the active renderer and the selected Java runtime, and reports the compatibility"
+            echo "  constraints it found. It never changes the renderer or the runtime."
+            echo "- Queries the official Modrinth API (\`https://api.modrinth.com/v2\`) for the exact"
+            echo "  version + loader pair, keeps only listed release/beta files with a primary JAR and a"
+            echo "  SHA-512/SHA-1 hash, resolves required dependencies, and drops conflicts, unlisted,"
+            echo "  archived and abandoned builds. No fixed mod list is installed."
+            echo "- Evaluates the investigated candidates - FerriteCore, Lithium, Sodium, ModernFix,"
+            echo "  ImmediatelyFast, Entity Culling, More Culling and Memory Leak Fix - and installs only"
+            echo "  the ones that are actually compatible and missing, within a cost-aware selection budget."
+            echo "- Sodium is validated against the renderer: it is offered on the LTW path for"
+            echo "  Minecraft 1.17+ and otherwise skipped with an explicit reason (GL4ES is blocked by the"
+            echo "  launcher for Sodium on 1.17+, and other renderers are not verified here)."
+            echo "- Downloads are staged, verified by size and hash, then moved into the installation's"
+            echo "  mods directory. Existing files are never overwritten without confirmation, unrelated"
+            echo "  mods are never removed, duplicates are skipped, and configs are left alone."
+            echo "- **Restore** removes only what Ultra-Optimization installed and puts back anything it"
+            echo "  displaced. State lives in \`<installation>/.ultra_optimization/state.json\`."
+            echo "- On-demand only: no service, no polling, no startup scan, no automatic download, no"
+            echo "  modpack handling, and a small bounded cache of Modrinth responses."
+            echo
+            echo "Vanilla installations are never modified and are never converted to a loader; shared"
+            echo "game directories are refused so another installation cannot be touched."
+            echo
+            echo "### Ultra-Lite (unchanged)"
+            echo
+            echo "Global launcher profile under **Settings -> Categories -> Miscellaneous settings ->"
+            echo "Performance profile**: reduced background work and cache, lower progress refresh rate,"
+            echo "and an optional conservative heap size on low-RAM devices. Balanced / Ultra-Lite / Custom"
+            echo "behave exactly as in the previous release; the profile files and defaults were verified"
+            echo "byte-identical to the reviewed baseline by \`scripts/verify_ultra_optimization.py\`."
+            echo
+            echo "The two features are independent, so all four combinations work:"
+            echo
+            echo "| Ultra-Lite | Ultra-Optimization | Behaviour |"
+            echo "| --- | --- | --- |"
+            echo "| OFF | OFF | Normal launcher |"
+            echo "| ON | OFF | Lightweight launcher |"
+            echo "| OFF | ON | Minecraft optimized through mods |"
+            echo "| ON | ON | Both simultaneously |"
+            echo
+            echo "### Supported Minecraft versions and loaders (as actually verified)"
+            echo
+            echo "Verified offline against fixture responses for the resolution policy, in these combinations:"
+            echo
+            echo "- Fabric 1.20.1 with LTW (dependency resolution, cost budget)"
+            echo "- Forge 1.20.1 with GL4ES (Sodium correctly skipped with a reason)"
+            echo "- NeoForge 1.21.1 with Zink (Sodium skipped, other mods offered)"
+            echo "- Quilt 1.19.2 (Fabric builds accepted only for Quilt-capable projects)"
+            echo "- Vanilla, shared-game-directory and under-Java-runtime installations (refused, no changes)"
+            echo
+            echo "At runtime the exact Minecraft version and loader of the selected installation decide"
+            echo "which mods Modrinth returns; unsupported or unverified combinations are skipped with an"
+            echo "explanation instead of being installed. No live Modrinth query and no on-device run was"
+            echo "performed by CI."
+            echo
+            echo "### Build information"
+            echo
+            echo "- Source: branch \`$GITHUB_REF_NAME\` at \`$GITHUB_SHA\`, built by GitHub Actions."
+            echo "- Gradle 8.14.5 (official distribution, SHA-256 \`6f74b601422d6d6fc4e1f9a1ab6522f642c2fdcbc15ae33ebd30ba3d7198e854\`), JDK 17 (Temurin), Android SDK platform 36, build-tools 35.0.0/36.0.0, NDK 29.0.14206865, CMake 3.22.1."
+            echo "- Debug variants with the standard Android debug keystore; no release APK is published"
+            echo "  because this project has no release signing configuration (a release APK would be"
+            echo "  unsigned and uninstallable)."
+            echo "- Package \`net.kdt.pojavlaunch.debug\`, minSdk 23, targetSdk 36,"
+            echo "  ABIs arm64-v8a, armeabi-v7a, x86, x86_64."
+            echo "- Verification: \`unzip -t\`, \`apksigner verify\`, \`zipalign -c -v 4\`, \`aapt dump badging\` - see \`release-verification.txt\`."
+            echo
+            echo "### APK assets and SHA-256"
+            echo
+            echo "| Asset | Size (bytes) | SHA-256 |"
+            echo "| --- | --- | --- |"
+            echo "| \`PojavLauncher-Renewed-Full.apk\` | $FULL_SIZE | \`$FULL_SHA\` |"
+            echo "| \`PojavLauncher-Renewed-Noruntime.apk\` | $NORUNTIME_SIZE | \`$NORUNTIME_SHA\` |"
+            echo
+            echo "The **Full** APK bundles the Java runtimes. The **Noruntime** APK is smaller and lets the"
+            echo "launcher download a runtime on first use. Install the variant that matches your device;"
+            echo "do not mix them with the previous release's APKs."
+            echo
+            echo "### Installation and upgrade"
+            echo
+            echo "1. If a PojavLauncher fork is already installed, install this APK over it (same"
+            echo "   \`net.kdt.pojavlaunch.debug\` package). If the signature differs, uninstall the old"
+            echo "   debug build first; your \`games/PojavLauncher\` data directory is not removed by that."
+            echo "2. Open **Settings -> Categories -> Ultra-Optimization** with the installation selected on"
+            echo "   the main screen. The screen scans it once, on demand."
+            echo "3. Review the mod list (will install / already installed / skipped and why), then press"
+            echo "   **Optimize** and confirm. Progress and per-file results are shown on the same screen."
+            echo "4. Press **Restore** to undo: only the files Ultra-Optimization installed are removed and"
+            echo "   displaced files are put back."
+            echo "5. Ultra-Lite stays where it was: **Settings -> Categories -> Miscellaneous settings ->"
+            echo "   Performance profile**. Enabling both is supported."
+            echo
+            echo "### Known limitations"
+            echo
+            echo "- Renderer compatibility: Sodium is offered only on LTW for Minecraft 1.17+. With GL4ES the"
+            echo "  launcher refuses that combination, so Ultra-Optimization skips Sodium instead of switching"
+            echo "  renderers; Zink, MobileGlues, Mesa and other renderers are not treated as verified for"
+            echo "  Sodium either. Sodium-family mods already present (Embeddium, Rubidium, Angelica) suppress"
+            echo "  Sodium to avoid a conflict."
+            echo "- Older Minecraft (before 1.17) and GL4ES-only devices get the non-rendering mods only."
+            echo "- Installations using a shared game directory, unresolved version aliases, or a Java"
+            echo "  runtime older than the version requires are refused without changes."
+            echo "- The mod list depends on what Modrinth currently publishes for that exact version/loader;"
+            echo "  nothing is installed when no compatible, hashed, listed file exists."
+            echo "- Debug build: expect debug-level overhead, and keep the previous release's APKs if you"
+            echo "  need the earlier state."
+            echo "- Not verified by CI: installing or launching on a physical Android device, live Modrinth"
+            echo "  responses, and real frame-time measurements."
+          } > release-notes.md
+          cat release-notes.md
+
+      - name: Publish the new GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ASSETS=(
+            PojavLauncher-Renewed-Full.apk
+            PojavLauncher-Renewed-Noruntime.apk
+            release-verification.txt
+          )
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; replacing its assets"
+            gh release upload "$RELEASE_TAG" "${ASSETS[@]}" --clobber
+          else
+            echo "Creating release $RELEASE_TAG from $GITHUB_SHA"
+            gh release create "$RELEASE_TAG" "${ASSETS[@]}" \
+              --target "$GITHUB_SHA" \
+              --title "$RELEASE_TITLE" \
+              --notes-file release-notes.md \
+              --prerelease
+          fi
+          echo "=== published release ==="
+          gh release view "$RELEASE_TAG" --json url,tagName,name,isPrerelease,targetCommitish,assets \
+            --jq '{url,tagName,name,isPrerelease,assets:[.assets[]|{name,size,digest}]}'
+          echo "=== previous release must still exist ==="
+          gh release view pojavlauncher-debug-apks-20261126 --json url,tagName,assets \
+            --jq '{url,tagName,assets:[.assets[].name]}'
