@@ -377,6 +377,21 @@ jobs:
           } > release-notes.md
           cat release-notes.md
 
+      # A verification-only run has to leave something the user can actually install, or the
+      # build would be untestable: keep the APKs as run artifacts (never as a release asset).
+      - name: Keep the debug APKs as run artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pojavlauncher-renewed-debug-apks
+          path: |
+            PojavLauncher-Renewed-Full.apk
+            PojavLauncher-Renewed-Noruntime.apk
+            release-verification.txt
+            apk-metadata.txt
+            release-notes.md
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Publication gate
         id: gate
         shell: bash
