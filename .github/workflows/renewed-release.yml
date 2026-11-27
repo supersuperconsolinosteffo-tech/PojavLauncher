@@ -719,6 +719,8 @@ jobs:
 
       - name: Expose the verification report when verification does not pass
         if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set +e
@@ -736,8 +738,14 @@ jobs:
             cat asset-verification.txt 2>/dev/null
           } > /tmp/diagnostic.txt
           test -s /tmp/diagnostic.txt || echo "the verification step wrote nothing at all" >> /tmp/diagnostic.txt
-          payload=$(head -c 24000 /tmp/diagnostic.txt | awk 'BEGIN{ORS=""} {gsub(/%/,"%25"); if (NR>1) printf "%%0A"; print}')
-          printf '::error title=verification diagnostics::%s\n' "$payload"
+          # GitHub truncates an annotation message, so the full report goes into a comment on
+          # the commit as well; the short annotations only carry the verdict lines.
+          brief=$(grep -E '^FAIL|^NOTE|verification_failures' asset-verification.txt 2>/dev/null | head -25 | tr '\n' '|')
+          printf '::error title=failed checks::%s\n' "report_bytes=$(wc -c < asset-verification.txt 2>/dev/null) brief=${brief:0:1300}"
+          lastline=$(tail -1 asset-verification.txt 2>/dev/null | tr -d '\n')
+          printf '::error title=last report line::%s\n' "last=${lastline:0:300}"
+          gh api -X POST "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" -F body=@- < /tmp/diagnostic.txt --jq .html_url > /dev/null 2>&1 \
+            || printf '::warning title=the full report could not be posted as a commit comment::read the annotations above\n'
 
       - name: Add both APKs to the existing release, keeping every current asset
         if: steps.gate.outputs.enabled == '1'
