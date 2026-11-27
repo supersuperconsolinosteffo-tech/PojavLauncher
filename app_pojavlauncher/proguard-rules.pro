@@ -25,3 +25,11 @@
  -keep class net.kdt.pojavlaunch.prefs.screens** {*;}
 
 
+
+# Ultra-Optimization: the Modrinth models and the per-installation state file are (de)serialized
+# reflectively by Gson, and the settings screen is restored by class name after process death.
+ -keep class net.kdt.pojavlaunch.ultraoptimization.UltraOptimizationModels$** { *; }
+ -keepclassmembers class net.kdt.pojavlaunch.ultraoptimization.UltraOptimizationState { *; }
+ -keepclassmembers class net.kdt.pojavlaunch.ultraoptimization.UltraOptimizationState$** { *; }
+ -keep class net.kdt.pojavlaunch.ultraoptimization.UltraOptimizationFragment
+ -keep class net.kdt.pojavlaunch.ultraoptimization.UltraOptimizationPreference

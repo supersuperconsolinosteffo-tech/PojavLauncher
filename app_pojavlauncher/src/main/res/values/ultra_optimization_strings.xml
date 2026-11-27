@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+
+    <string name="ultra_optimization_title">Ultra-Optimization</string>
+    <string name="ultra_optimization_pref_summary">Per-installation mod optimization through Modrinth. Independent from the Ultra-Lite profile.</string>
+    <string name="ultra_optimization_intro">Ultra-Optimization checks the selected installation against the official Modrinth API, then installs only the missing optimization mods that match this exact Minecraft version and loader. It never changes the renderer, the Java runtime, or your existing mods.</string>
+
+    <string name="ultra_optimization_status_idle">Select an installation on the main screen, then re-scan.</string>
+    <string name="ultra_optimization_scanning">Reading the selected installation…</string>
+    <string name="ultra_optimization_resolving">Asking Modrinth for compatible versions…</string>
+    <string name="ultra_optimization_working">Working… The progress bar shows the current step only.</string>
+
+    <string name="ultra_optimization_rescan">Re-scan</string>
+    <string name="ultra_optimization_install">Optimize</string>
+    <string name="ultra_optimization_restore">Restore</string>
+    <string name="ultra_optimization_back">Back</string>
+
+    <string name="ultra_optimization_state_none">Not enabled for this installation</string>
+    <string name="ultra_optimization_state_enabled">Enabled: %1$d mod file(s) installed by Ultra-Optimization</string>
+    <string name="ultra_optimization_ultralite">Ultra-Lite launcher profile: %1$s (global, not changed here)</string>
+    <string name="ultra_optimization_ultralite_on">on</string>
+    <string name="ultra_optimization_ultralite_off">off</string>
+
+    <string name="ultra_optimization_badge_will_install">Will install</string>
+    <string name="ultra_optimization_badge_installed">Installed</string>
+    <string name="ultra_optimization_badge_skipped">Skipped</string>
+    <string name="ultra_optimization_badge_failed">Failed</string>
+    <string name="ultra_optimization_line_format">%1$s · %2$s · %3$s</string>
+    <string name="ultra_optimization_unknown_version">unknown</string>
+    <string name="ultra_optimization_row_title">[%1$s] %2$s</string>
+    <string name="ultra_optimization_dependency">(required dependency)</string>
+    <string name="ultra_optimization_cost">est. %1$d MB</string>
+
+    <string name="ultra_optimization_install_title">Install optimizations</string>
+    <string name="ultra_optimization_install_confirm">Ultra-Optimization will download %1$d verified file(s) into the mods folder of "%2$s".\n\nNothing is removed, renamed, or overwritten: files that already exist are skipped. A backup log is kept inside the installation so this can be undone.</string>
+    <string name="ultra_optimization_restore_title">Restore previous state</string>
+    <string name="ultra_optimization_restore_confirm">This removes only the %1$d file(s) that Ultra-Optimization installed and puts back any file it displaced. Your own mods, config files and other installations are not touched.</string>
+
+    <string name="ultra_optimization_result_summary">%1$d installed, %2$d skipped, %3$d failed.</string>
+    <string name="ultra_optimization_result_cancelled">Cancelled. Files that were already installed stay installed and are listed above.</string>
+    <string name="ultra_optimization_nothing_to_install">Nothing to install: every compatible mod is already present or was skipped.</string>
+    <string name="ultra_optimization_busy">A scan or install is already running for this screen.</string>
+    <string name="ultra_optimization_no_plan">No verified plan is available. Re-scan first; nothing was installed.</string>
+
+</resources>

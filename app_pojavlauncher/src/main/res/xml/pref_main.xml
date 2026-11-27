@@ -52,6 +52,14 @@
             android:summary="@string/preference_experimental_description"
             android:fragment="net.kdt.pojavlaunch.prefs.screens.LauncherPreferenceExperimentalFragment"
             android:icon="@drawable/ic_px_experiment"/>
+
+        <!-- Ultra-Optimization is its own screen with its own per-installation state; it does not
+             touch the global performance profile above (see UltraOptimizationPreference). -->
+        <net.kdt.pojavlaunch.ultraoptimization.UltraOptimizationPreference
+            android:key="ultra_optimization_screen"
+            android:title="@string/ultra_optimization_title"
+            android:summary="@string/ultra_optimization_pref_summary"
+            android:icon="@drawable/ic_px_zap"/>
     </PreferenceCategory>
 
     <SwitchPreferenceCompat

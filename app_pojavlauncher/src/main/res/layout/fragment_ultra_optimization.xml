@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background_app"
+    android:orientation="vertical"
+    android:paddingHorizontal="@dimen/fragment_padding_medium">
+
+    <TextView
+        android:id="@+id/ultra_opt_title"
+        style="@style/TextAppearance.AppCompat.Title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/padding_large"
+        android:gravity="center"
+        android:text="@string/ultra_optimization_title"
+        android:textColor="@color/primary_text" />
+
+    <View
+        style="@style/ThickDivider"
+        android:layout_width="match_parent"
+        android:layout_marginTop="@dimen/fragment_padding_medium" />
+
+    <ScrollView
+        android:id="@+id/ultra_opt_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fadeScrollbars="true"
+        android:scrollbarThumbVertical="@color/minebutton_color">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="@dimen/padding_large">
+
+            <TextView
+                android:id="@+id/ultra_opt_intro"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/fragment_padding_medium"
+                android:text="@string/ultra_optimization_intro"
+                android:textColor="@color/secondary_text"
+                android:textSize="@dimen/_12ssp" />
+
+            <TextView
+                android:id="@+id/ultra_opt_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/fragment_padding_medium"
+                android:background="@drawable/background_card"
+                android:padding="@dimen/fragment_padding_medium"
+                android:text="@string/ultra_optimization_status_idle"
+                android:textColor="@color/primary_text"
+                android:textSize="@dimen/_12ssp" />
+
+            <LinearLayout
+                android:id="@+id/ultra_opt_modlist"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/fragment_padding_medium"
+                android:orientation="vertical" />
+
+            <TextView
+                android:id="@+id/ultra_opt_log"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/fragment_padding_medium"
+                android:textColor="@color/secondary_text"
+                android:textSize="@dimen/_12ssp"
+                android:visibility="gone" />
+        </LinearLayout>
+    </ScrollView>
+
+    <ProgressBar
+        android:id="@+id/ultra_opt_progress"
+        style="@style/Widget.AppCompat.ProgressBar.Horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:max="100"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingTop="@dimen/fragment_padding_medium"
+        android:paddingBottom="@dimen/fragment_padding_medium">
+
+        <Button
+            android:id="@+id/ultra_opt_scan_button"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/ultra_optimization_rescan" />
+
+        <Button
+            android:id="@+id/ultra_opt_install_button"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:enabled="false"
+            android:text="@string/ultra_optimization_install" />
+
+        <Button
+            android:id="@+id/ultra_opt_restore_button"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:enabled="false"
+            android:text="@string/ultra_optimization_restore" />
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/ultra_opt_back_button"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="@dimen/padding_large"
+        android:text="@string/ultra_optimization_back" />
+</LinearLayout>
