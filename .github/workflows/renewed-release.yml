@@ -190,15 +190,41 @@ jobs:
             echo "Not performed by CI: installation and runtime testing on a physical Android device,"
             echo "live Modrinth API queries, and end-to-end mod installation on a device."
           } | tee release-verification.txt
+          : > apk-metadata.txt
+          for apk in PojavLauncher-Renewed-Full.apk PojavLauncher-Renewed-Noruntime.apk; do
+            badging=$(aapt dump badging "$apk")
+            stem=${apk%.apk}
+            pkg=$(printf '%s\n' "$badging" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
+            vcode=$(printf '%s\n' "$badging" | sed -n "s/.*versionCode='\([^']*\)'.*/\1/p")
+            vname=$(printf '%s\n' "$badging" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")
+            minsdk=$(printf '%s\n' "$badging" | sed -n "s/^sdkVersion:'\([^']*\)'.*/\1/p")
+            targetsdk=$(printf '%s\n' "$badging" | sed -n "s/^targetSdkVersion:'\([^']*\)'.*/\1/p")
+            abis=$(printf '%s\n' "$badging" | sed -n 's/^native-code: //p' | tr -d "'" | tr ' ' ',' | sed 's/,$//')
+            size=$(stat -c%s "$apk")
+            sha=$(sha256sum "$apk" | awk '{print $1}')
+            signer=$(apksigner verify --print-certs "$apk" 2>/dev/null | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+            {
+              echo "$stem.package=$pkg"
+              echo "$stem.versionName=$vname"
+              echo "$stem.versionCode=$vcode"
+              echo "$stem.minSdk=$minsdk"
+              echo "$stem.targetSdk=$targetsdk"
+              echo "$stem.abis=$abis"
+              echo "$stem.size_bytes=$size"
+              echo "$stem.sha256=$sha"
+              echo "$stem.debug_signer_sha256=$signer"
+            } >> apk-metadata.txt
+          done
+          cat apk-metadata.txt
 
       - name: Compose release notes
         shell: bash
         run: |
           set -euo pipefail
-          FULL_SIZE=$(stat -c%s PojavLauncher-Renewed-Full.apk)
-          FULL_SHA=$(sha256sum PojavLauncher-Renewed-Full.apk | awk '{print $1}')
-          NORUNTIME_SIZE=$(stat -c%s PojavLauncher-Renewed-Noruntime.apk)
-          NORUNTIME_SHA=$(sha256sum PojavLauncher-Renewed-Noruntime.apk | awk '{print $1}')
+          FULL_SIZE=$(grep '^PojavLauncher-Renewed-Full\.size_bytes=' apk-metadata.txt | cut -d= -f2)
+          FULL_SHA=$(grep '^PojavLauncher-Renewed-Full\.sha256=' apk-metadata.txt | cut -d= -f2)
+          NORUNTIME_SIZE=$(grep '^PojavLauncher-Renewed-Noruntime\.size_bytes=' apk-metadata.txt | cut -d= -f2)
+          NORUNTIME_SHA=$(grep '^PojavLauncher-Renewed-Noruntime\.sha256=' apk-metadata.txt | cut -d= -f2)
           {
             echo "## PojavLauncher Renewed"
             echo
@@ -274,8 +300,12 @@ jobs:
             echo "- Debug variants with the standard Android debug keystore; no release APK is published"
             echo "  because this project has no release signing configuration (a release APK would be"
             echo "  unsigned and uninstallable)."
-            echo "- Package \`net.kdt.pojavlaunch.debug\`, minSdk 23, targetSdk 36,"
-            echo "  ABIs arm64-v8a, armeabi-v7a, x86, x86_64."
+            echo "- Package \`$(grep '^PojavLauncher-Renewed-Full\.package=' apk-metadata.txt | cut -d= -f2)\`,"
+            echo "  minSdk \`$(grep '^PojavLauncher-Renewed-Full\.minSdk=' apk-metadata.txt | cut -d= -f2)\`,"
+            echo "  targetSdk \`$(grep '^PojavLauncher-Renewed-Full\.targetSdk=' apk-metadata.txt | cut -d= -f2)\`,"
+            echo "  versionName \`$(grep '^PojavLauncher-Renewed-Full\.versionName=' apk-metadata.txt | cut -d= -f2)\`,"
+            echo "  ABIs \`$(grep '^PojavLauncher-Renewed-Full\.abis=' apk-metadata.txt | cut -d= -f2 | tr ',' ' ')\`"
+            echo "  (read from \`aapt dump badging\` on the built APKs; see \`apk-metadata.txt\`)."
             echo "- Verification: \`unzip -t\`, \`apksigner verify\`, \`zipalign -c -v 4\`, \`aapt dump badging\` - see \`release-verification.txt\`."
             echo
             echo "### APK assets and SHA-256"
@@ -332,10 +362,15 @@ jobs:
             PojavLauncher-Renewed-Full.apk
             PojavLauncher-Renewed-Noruntime.apk
             release-verification.txt
+            apk-metadata.txt
           )
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "Release $RELEASE_TAG already exists; replacing its assets"
+            echo "Release $RELEASE_TAG already exists; replacing its assets, notes and target commit"
             gh release upload "$RELEASE_TAG" "${ASSETS[@]}" --clobber
+            gh release edit "$RELEASE_TAG" --title "$RELEASE_TITLE" --notes-file release-notes.md
+            RELEASE_ID=$(gh release view "$RELEASE_TAG" --json id --jq .id)
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+              -f target_commitish="$GITHUB_SHA" --jq '{target_commitish,tag_name}'
           else
             echo "Creating release $RELEASE_TAG from $GITHUB_SHA"
             gh release create "$RELEASE_TAG" "${ASSETS[@]}" \
