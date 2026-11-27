@@ -184,8 +184,12 @@ public final class UltraOptimizationInstaller {
      */
     public static Result restore(File gameDirectory, Callback callback) {
         Result result = new Result();
+        if (gameDirectory == null) {
+            result.errors.add("No installation is selected.");
+            return result;
+        }
         UltraOptimizationState state = UltraOptimizationState.load(gameDirectory);
-        if (gameDirectory == null || state == null) {
+        if (state == null) {
             result.errors.add("This installation has no Ultra-Optimization state to restore.");
             return result;
         }
