@@ -245,6 +245,8 @@ public final class UltraOptimizationModels {
         public int budgetCount;
         public int requiredJavaMajor;
         public String sodiumPolicyReason;
+        /** What the detected renderer means for selection; shown by the screen, never a switch. */
+        public String rendererNote;
         public String summary;
 
         public List<PlanItem> installableItems() {

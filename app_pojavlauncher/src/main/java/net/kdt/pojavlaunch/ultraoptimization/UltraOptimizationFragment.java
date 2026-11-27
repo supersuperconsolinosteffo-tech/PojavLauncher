@@ -162,6 +162,11 @@ public class UltraOptimizationFragment extends Fragment
                 .append("   Loader: ").append(environment.loader.displayName()).append('\n');
         builder.append("Renderer: ")
                 .append(UltraOptimizationDetector.rendererDisplayName(environment.renderer)).append('\n');
+        if (resolution != null && resolution.rendererNote != null && !resolution.rendererNote.isEmpty()) {
+            // Which renderer is in use, what it advertises, and why that only affects
+            // renderer-dependent mods. Read-only: the selected renderer is never changed here.
+            builder.append("Renderer capability: ").append(resolution.rendererNote).append('\n');
+        }
         builder.append("Java runtime: ");
         if (environment.runtimeJavaMajor > 0) {
             builder.append("Java ").append(environment.runtimeJavaMajor);

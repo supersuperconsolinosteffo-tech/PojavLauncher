@@ -128,6 +128,17 @@ public final class UltraOptimizationResolver {
                         environment == null ? null : environment.renderer,
                         environment == null ? null : environment.minecraftVersion);
         resolution.sodiumPolicyReason = sodiumPolicy.reason;
+        resolution.rendererNote = UltraOptimizationDetector
+                .rendererNote(environment == null ? null : environment.renderer);
+        if (sodiumPolicy.capability.isKrypton()) {
+            // Krypton is a distinct renderer, so state it plainly: recognised, classified, and not
+            // a reason to withhold the mods that do not touch the renderer.
+            resolution.warnings.add("Renderer: " + sodiumPolicy.capability.displayName
+                    + " (Krypton family, desktop OpenGL "
+                    + sodiumPolicy.capability.desktopGlVersion() + " advertised). Non-rendering"
+                    + " optimization mods are evaluated normally; only renderer-dependent mods are"
+                    + " withheld, and the renderer is not changed.");
+        }
         resolution.warnings.add("Sodium policy: " + sodiumPolicy.reason);
 
         if (fatal) {
