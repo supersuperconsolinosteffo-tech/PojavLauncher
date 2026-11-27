@@ -27,6 +27,14 @@ FEATURE_PKG = "net/kdt/pojavlaunch/ultraoptimization"
 # Git blob SHA-1 values at the reviewed baseline (446d4a6). These files are the existing
 # Ultra-Lite implementation, its call sites, or build/config safety boundaries.
 PROTECTED = {
+    # Renderer definitions the Ultra-Optimization policy is derived from (Krypton/NG-GL4ES
+    # included): this feature must not quietly edit them to make a renderer look eligible.
+    'app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/game/renderer/def/Renderers.java': '28f1bbed27b578005ef768c4f04acb17bf49db55',
+    'app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/game/renderer/RenderSpec.java': '2494563e7ad40278e7e35caa3f8691ad2b9cbcb9',
+    'app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/game/renderer/GameRenderer.java': 'a3505d1d2b4a885a99751b21d59dd11a64910ba4',
+    'app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/game/renderer/RendererCache.java': '6eb623beb3be6d83977a8632a0ccbd42e678ef48',
+    'app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/game/renderer/impl/GLESRenderSpec.java': 'e38496798ccf55f7d655717685ed3bd5a1741211',
+    'app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/game/renderer/impl/MesaRenderSpec.java': '60a41e4950cd499da9cff1e060150cb13abbfdb4',
     'app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/prefs/PerformanceProfile.java': 'c1e07f1f0c2b5b15de0f94dd2f9b85081c0a04ac',
     'app_pojavlauncher/src/main/res/values/perf_profiles.xml': '106aae163d5e14577fe320228532731c7d2a60ea',
     'app_pojavlauncher/src/main/res/xml/pref_misc.xml': '78e738e924860d5373e21071c35b1115c3e5c0ff',
@@ -113,6 +121,12 @@ REQUIRED_SNIPPETS = {
         ('GL4ES skip', 'GL4ES'),
         ('LTW allow', 'LTW_RENDERER'),
         ('never switch renderer', 'no renderer change is made'),
+        ('Krypton tag comes from the launcher', 'Renderers.NGGL4ES_RENDERER'),
+        ('Krypton is its own family', 'RendererFamily.KRYPTON'),
+        ('Krypton capability is read from the spec', 'LIBGL_GL=31'),
+        ('Krypton is not conflated', 'never as LTW or Zink'),
+        ('legacy GL4ES aliases', 'opengles2_4'),
+        ('renderer capability report', 'rendererNote'),
     ],
     'UltraOptimizationInstaller.java': [
         ('staged download', '.part'),

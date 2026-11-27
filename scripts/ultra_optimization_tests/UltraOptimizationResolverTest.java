@@ -1,3 +1,4 @@
+import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -9,9 +10,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.TimeZone;
 
+import net.kdt.pojavlaunch.game.renderer.def.Renderers;
 import net.kdt.pojavlaunch.ultraoptimization.UltraOptimizationDetector;
+import net.kdt.pojavlaunch.ultraoptimization.UltraOptimizationDetector.RendererFamily;
 import net.kdt.pojavlaunch.ultraoptimization.UltraOptimizationMatrix;
 import net.kdt.pojavlaunch.ultraoptimization.UltraOptimizationModels;
+import net.kdt.pojavlaunch.ultraoptimization.UltraOptimizationDetector.RendererCapability;
 import net.kdt.pojavlaunch.ultraoptimization.UltraOptimizationModels.Candidate;
 import net.kdt.pojavlaunch.ultraoptimization.UltraOptimizationModels.DataSource;
 import net.kdt.pojavlaunch.ultraoptimization.UltraOptimizationModels.DependencyInfo;
@@ -24,6 +28,8 @@ import net.kdt.pojavlaunch.ultraoptimization.UltraOptimizationModels.ProjectInfo
 import net.kdt.pojavlaunch.ultraoptimization.UltraOptimizationModels.Resolution;
 import net.kdt.pojavlaunch.ultraoptimization.UltraOptimizationModels.VersionInfo;
 import net.kdt.pojavlaunch.ultraoptimization.UltraOptimizationResolver;
+import net.kdt.pojavlaunch.ultraoptimization.UltraOptimizationState;
+
 
 /**
  * Offline compatibility-resolution tests. These fixtures are not live Modrinth responses and do
@@ -69,6 +75,24 @@ public final class UltraOptimizationResolverTest {
         }});
         scenario("exclusive culling group", new Runnable() { @Override public void run() {
             testCullingGroup();
+        }});
+        scenario("renderer families: GL4ES, Krypton, LTW, Zink, unknown", new Runnable() { @Override public void run() {
+            testRendererFamilyClassification();
+        }});
+        scenario("Krypton 1.21.11 / Fabric / 2048 MB device profile", new Runnable() { @Override public void run() {
+            testKryptonTestedDeviceProfile();
+        }});
+        scenario("Krypton offers the non-rendering mods", new Runnable() { @Override public void run() {
+            testKryptonOffersNonRendererMods();
+        }});
+        scenario("Krypton resolves required dependencies like any other renderer", new Runnable() { @Override public void run() {
+            testKryptonResolvesRequiredDependency();
+        }});
+        scenario("Krypton with the user's installed set: no-op, not a refusal", new Runnable() { @Override public void run() {
+            testKryptonInstalledSetIsNoOp();
+        }});
+        scenario("per-installation state ownership survives a Krypton run", new Runnable() { @Override public void run() {
+            testStateOwnershipAfterKryptonPlan();
         }});
         System.out.println("Ultra-Optimization offline tests: ALL PASSED");
     }
@@ -167,8 +191,11 @@ public final class UltraOptimizationResolverTest {
         check(!hasInstallable(resolution, "sodium"),
                 "Sodium skipped on renderer without established compatibility");
         PlanItem sodium = findItem(resolution, "sodium");
-        check(sodium != null && containsText(sodium.reason, "no validated Sodium compatibility"),
+        check(sodium != null && containsText(sodium.reason, "no validated Sodium path"),
                 "Sodium skip explains missing renderer validation");
+        check(sodium != null && containsText(sodium.reason, "Zink")
+                && containsText(sodium.reason, "4.6"),
+                "Sodium skip quotes the renderer and its advertised desktop GL version");
         check(!hasInstallable(resolution, "memoryleakfix"), "Memory Leak Fix skipped on 1.21.1");
         check(hasInstallable(resolution, "lithium"), "A non-rendering optimization remains available");
     }
@@ -425,6 +452,308 @@ public final class UltraOptimizationResolverTest {
 
     private static String key(String value) {
         return value == null ? "" : value.toLowerCase(Locale.US);
+    }
+
+    // ------------------------------------------------------------ renderer capability model
+
+    /**
+     * Krypton Wrapper (NG-GL4ES) has its own renderer tag in this launcher, so it must be
+     * classified as itself: never LTW, never Zink, never plain GL4ES - and an unrecognised tag
+     * must never be reported as Krypton either.
+     */
+    private static void testRendererFamilyClassification() {
+        // Tags are compared against the launcher's own constants, not copies.
+        check("opengles_nggl4es".equals(Renderers.NGGL4ES_RENDERER),
+                "Krypton keeps its distinct launcher tag");
+        check(!Renderers.NGGL4ES_RENDERER.equals(Renderers.GL4ES_RENDERER),
+                "Krypton does not share the GL4ES tag");
+
+        RendererCapability krypton = UltraOptimizationDetector.describe(Renderers.NGGL4ES_RENDERER);
+        check(krypton.identified, "Krypton is identified");
+        check(krypton.family == RendererFamily.KRYPTON, "Krypton family");
+        check(krypton.isKrypton() && !krypton.isLtw() && !krypton.isGl4es(),
+                "Krypton is not classified as LTW or GL4ES");
+        check(krypton.family != RendererFamily.ZINK, "Krypton is not classified as Zink");
+        check(containsText(krypton.displayName, "Krypton") && containsText(krypton.displayName, "NG-GL4ES"),
+                "Krypton display names both spellings");
+        check(krypton.esMajor == 3, "Krypton sets up OpenGL ES 3 (glesVersion() == 3)");
+        check("3.1".equals(krypton.desktopGlVersion()),
+                "Krypton advertises desktop OpenGL 3.1 (LIBGL_GL=31)");
+        check(!krypton.launcherGuardsSodium,
+                "GameRunner's GL4ES Sodium guard does not cover the Krypton spec");
+        check(!krypton.sodiumValidated, "Krypton has no validated Sodium path");
+        check(containsText(krypton.note, "libng_gl4es.so"), "Krypton note cites its native library");
+
+        check(UltraOptimizationDetector.describe(Renderers.GL4ES_RENDERER).family == RendererFamily.GL4ES,
+                "Standard GL4ES stays GL4ES");
+        check(UltraOptimizationDetector.describe("opengles2_4").family == RendererFamily.GL4ES,
+                "Legacy alias opengles2_4 is GL4ES");
+        check(UltraOptimizationDetector.describe("opengles2_5").family == RendererFamily.GL4ES,
+                "Legacy alias opengles2_5 is GL4ES");
+        check(UltraOptimizationDetector.describe("opengles2_4").launcherGuardsSodium,
+                "Legacy GL4ES aliases keep the launcher guard");
+        check(UltraOptimizationDetector.describe(Renderers.LTW_RENDERER).isLtw(),
+                "LTW stays LTW");
+        check(UltraOptimizationDetector.describe(Renderers.LTW_RENDERER).sodiumValidated,
+                "LTW remains the only validated Sodium path");
+        check(UltraOptimizationDetector.describe(Renderers.ZINK_RENDERER).family == RendererFamily.ZINK,
+                "Zink stays Zink");
+        check("4.6".equals(UltraOptimizationDetector.describe(Renderers.ZINK_RENDERER).desktopGlVersion()),
+                "Zink advertises MESA_GL_VERSION_OVERRIDE=4.6");
+        check("4.3".equals(UltraOptimizationDetector.describe(Renderers.LEGACYZINK_RENDERER).desktopGlVersion()),
+                "Legacy Zink advertises 4.3");
+
+        // No renderer the launcher can persist may fall through as unidentified.
+        String[] knownTags = {
+                Renderers.LTW_RENDERER, Renderers.GL4ES_RENDERER, Renderers.NGGL4ES_RENDERER,
+                Renderers.MOBILEGLUES_RENDERER, Renderers.SFPEW_RENDERER, Renderers.ZINK_RENDERER,
+                Renderers.LEGACYZINK_RENDERER, Renderers.FREEDRENO_RENDERER, Renderers.MESA_RENDERER,
+                Renderers.MESA_RENDERER_EXT
+        };
+        for (String tag : knownTags) {
+            check(UltraOptimizationDetector.describe(tag).identified, "Identified: " + tag);
+        }
+
+        RendererCapability unknown = UltraOptimizationDetector.describe("opengles_future_wrapper");
+        check(!unknown.identified, "Unknown tag is not identified");
+        check(!unknown.isKrypton(), "Unknown tag is never reported as Krypton");
+        check(!unknown.isGl4es(), "Unknown tag is never reported as GL4ES");
+        check(!UltraOptimizationDetector.describe("").identified, "Empty renderer is unknown");
+        check(!UltraOptimizationDetector.describe(null).identified, "Null renderer is unknown");
+        check("Unknown".equals(UltraOptimizationDetector.describe(null).displayName),
+                "Null renderer has a neutral display name");
+
+        // Sodium policy per renderer.
+        check(!UltraOptimizationDetector.sodiumPolicy(Renderers.NGGL4ES_RENDERER, "1.21.11").allowed,
+                "Sodium withheld on Krypton");
+        check(containsText(UltraOptimizationDetector.sodiumPolicy(Renderers.NGGL4ES_RENDERER, "1.21.11").reason,
+                "Krypton"), "Krypton skip explains itself");
+        check(containsText(UltraOptimizationDetector.sodiumPolicy(Renderers.NGGL4ES_RENDERER, "1.21.11").reason,
+                "3.1"), "Krypton skip quotes the advertised desktop GL version");
+        check(containsText(UltraOptimizationDetector.sodiumPolicy(Renderers.NGGL4ES_RENDERER, "1.21.11").reason,
+                "no renderer change is made"), "Krypton skip promises no renderer switch");
+        check(UltraOptimizationDetector.sodiumPolicy(Renderers.NGGL4ES_RENDERER, "1.21.11")
+                .capability.family == RendererFamily.KRYPTON,
+                "The policy carries the Krypton capability to its callers");
+        check(containsText(UltraOptimizationDetector.sodiumPolicy("opengles2", "1.20.1").reason,
+                "blocked by PojavLauncher"), "GL4ES keeps its launcher-block reason");
+        check(containsText(UltraOptimizationDetector.sodiumPolicy("opengles2_4", "1.20.1").reason,
+                "GL4ES"), "Legacy GL4ES alias gets the GL4ES reason, not a vague one");
+        check(UltraOptimizationDetector.sodiumPolicy(Renderers.LTW_RENDERER, "1.20.1").allowed,
+                "Sodium remains allowed on LTW");
+        check(!UltraOptimizationDetector.sodiumPolicy(Renderers.LTW_RENDERER, "1.16.5").allowed,
+                "Sodium stays withheld on LTW below 1.17");
+        check(!UltraOptimizationDetector.sodiumPolicy(Renderers.ZINK_RENDERER, "1.21.1").allowed,
+                "Sodium still withheld on Zink despite its 4.6 claim");
+        for (String tag : knownTags) {
+            if (Renderers.LTW_RENDERER.equals(tag)) continue;
+            check(!UltraOptimizationDetector.sodiumPolicy(tag, "1.21.1").allowed,
+                    "Only LTW may receive Sodium: " + tag);
+        }
+        // The conservative fallback for an unidentifiable renderer must also withhold it.
+        check(!UltraOptimizationDetector.sodiumPolicy("opengles_future_wrapper", "1.21.1").allowed,
+                "Unknown renderer cannot earn Sodium");
+        check(containsText(UltraOptimizationDetector.sodiumPolicy("opengles_future_wrapper", "1.21.1").reason,
+                "not a renderer identifier this"), "Unknown renderer reason says it is unrecognised");
+
+        // The capability line is what the screen shows; it must be renderer-specific and honest.
+        String kryptonNote = UltraOptimizationDetector.rendererNote(Renderers.NGGL4ES_RENDERER);
+        check(containsText(kryptonNote, "Krypton"), "Krypton capability line names the wrapper");
+        check(containsText(kryptonNote, "never as LTW or Zink"), "Krypton line records the non-conflation");
+        check(containsText(kryptonNote, "never changed"), "Krypton line promises no renderer change");
+        check(!containsText(kryptonNote, "GL4ES is blocked"),
+                "Krypton is not described with the standard GL4ES rule");
+    }
+
+    // ----------------------------------------------------- Krypton end-to-end resolution
+
+    /** The user's reported test configuration: 1.21.11, Fabric, Java 21, Krypton, 2048 MB. */
+    private static void testKryptonTestedDeviceProfile() {
+        FakeSource source = fullSource("1.21.11", "fabric", Arrays.asList("fabric"));
+        Environment environment = environment("1.21.11", Loader.FABRIC, Renderers.NGGL4ES_RENDERER,
+                21, 2048, false);
+        Resolution resolution = UltraOptimizationResolver.resolve(environment, source, null);
+
+        check(resolution.errors.isEmpty(), "Krypton never causes a refusal");
+        check(resolution.canInstall, "Krypton resolution still offers mods at 2048 MB");
+        check(!hasInstallable(resolution, "sodium"), "Sodium withheld on Krypton");
+        PlanItem sodium = findItem(resolution, "sodium");
+        check(sodium != null && sodium.state == ItemState.SKIPPED, "Sodium is a skipped row, not hidden");
+        check(sodium != null && containsText(sodium.reason, "Krypton"),
+                "The skipped row explains the Krypton limitation");
+        for (PlanItem item : resolution.installableItems()) {
+            check(!"sodium".equalsIgnoreCase(item.slug), "No renderer-dependent mod is offered");
+        }
+        check(resolution.budgetCount == 2, "2048 MB keeps the two-mod cost budget");
+        check(resolution.selectedCount <= resolution.budgetCount, "Budget is not exceeded on Krypton");
+        check(containsText(resolution.rendererNote, "Krypton"), "Renderer capability is reported");
+        check(containsAny(resolution.warnings, "Krypton family"), "Krypton gets its own warning line");
+        check(containsText(resolution.sodiumPolicyReason, "Krypton"), "Sodium policy names Krypton");
+        check(!containsText(resolution.summary, "renderer"),
+                "The summary does not blame the renderer for the plan");
+    }
+
+    /** Same renderer, enough RAM for the whole non-rendering set. */
+    private static void testKryptonOffersNonRendererMods() {
+        FakeSource source = fullSource("1.21.11", "fabric", Arrays.asList("fabric"));
+        Environment environment = environment("1.21.11", Loader.FABRIC, Renderers.NGGL4ES_RENDERER,
+                21, 8192, false);
+        Resolution resolution = UltraOptimizationResolver.resolve(environment, source, null);
+
+        check(resolution.errors.isEmpty(), "No fatal error with a capable renderer budget");
+        check(resolution.budgetCount == 5, "8 GB fixture uses the five-mod budget");
+        check(hasInstallable(resolution, "ferrite-core"), "FerriteCore offered on Krypton");
+        check(hasInstallable(resolution, "lithium"), "Lithium offered on Krypton");
+        check(hasInstallable(resolution, "modernfix"), "ModernFix offered on Krypton");
+        check(hasInstallable(resolution, "immediatelyfast"), "ImmediatelyFast offered on Krypton");
+        check(!hasInstallable(resolution, "sodium"), "Sodium still withheld on Krypton");
+        int cullingSelected = 0;
+        for (PlanItem item : resolution.installableItems()) {
+            if ("entityculling".equalsIgnoreCase(item.slug) || "moreculling".equalsIgnoreCase(item.slug)) {
+                cullingSelected++;
+            }
+        }
+        check(cullingSelected == 1, "Exactly one culling mod is selected (exclusive group)");
+        check(!hasInstallable(resolution, "memoryleakfix"), "Memory Leak Fix skipped on 1.21.11");
+
+        // Only one candidate in the whole catalogue is renderer-gated. If that ever grows, the
+        // Krypton policy has to be re-examined for each new renderer-dependent mod, not assumed.
+        int rendererGated = 0;
+        for (Candidate candidate : UltraOptimizationModels.candidates()) {
+            if (candidate.sodium) rendererGated++;
+        }
+        check(rendererGated == 1, "Sodium is the only renderer-gated candidate");
+
+        for (PlanItem item : resolution.items) {
+            if (item.state != ItemState.SKIPPED) continue;
+            if ("sodium".equalsIgnoreCase(item.slug)) continue;
+            check(!containsText(item.reason, "krypton"),
+                    "Nothing is refused merely because the renderer is Krypton: " + item.slug);
+            check(!containsText(item.reason, "renderer"),
+                    "No renderer blame is attached to a non-rendering mod: " + item.slug);
+        }
+    }
+
+    /** Required dependencies still resolve on Krypton, exactly as on any other renderer. */
+    private static void testKryptonResolvesRequiredDependency() {
+        FakeSource source = fullSource("1.21.11", "fabric", Arrays.asList("fabric"));
+        addDependencyProject(source, "required-api", "required-api-1.21.11", "1.21.11", "fabric");
+        VersionInfo lithium = source.versionById.get("ver-lithium-1.21.11");
+        lithium.dependencies = Collections.singletonList(dependency("id-required-api",
+                "required-api-1.21.11", "required"));
+        Environment environment = environment("1.21.11", Loader.FABRIC, Renderers.NGGL4ES_RENDERER,
+                21, 8192, false);
+        Resolution resolution = UltraOptimizationResolver.resolve(environment, source, null);
+
+        check(resolution.errors.isEmpty(), "Krypton dependency scenario is not refused");
+        check(hasInstallable(resolution, "lithium"), "Lithium offered on Krypton");
+        check(hasInstallable(resolution, "required-api"),
+                "Required dependency resolves on Krypton");
+        PlanItem dependencyItem = findItem(resolution, "required-api");
+        check(dependencyItem != null && dependencyItem.dependency,
+                "The resolved project is marked as a dependency, not a candidate");
+        check(!hasInstallable(resolution, "sodium"), "Sodium withheld in the dependency scenario");
+    }
+
+    /** A Krypton installation that already has the reported set must be a no-op, never a refusal. */
+    private static void testKryptonInstalledSetIsNoOp() {
+        FakeSource source = fullSource("1.21.11", "fabric", Arrays.asList("fabric"));
+        Environment environment = environment("1.21.11", Loader.FABRIC, Renderers.NGGL4ES_RENDERER,
+                21, 8192, false);
+        String[] installed = {
+                "fabric-api-0.115.0.jar", "cloth-config-16.0.jar",
+                "ferritecore-7.0.0.jar", "lithium-0.15.4.jar",
+                "entityculling-1.7.5.jar", "moreculling-1.24.10.jar",
+                "immediatelyfast-1.5.7.jar"
+        };
+        for (String fileName : installed) environment.installedFileNames.add(fileName);
+        environment.installedProjectIds.addAll(Arrays.asList("ferrite-core", "lithium",
+                "entityculling", "moreculling", "immediatelyfast", "modernfix"));
+
+        Resolution resolution = UltraOptimizationResolver.resolve(environment, source, null);
+        check(resolution.errors.isEmpty(), "Already-optimized Krypton install is not refused");
+        check(!resolution.canInstall, "Nothing new is offered when everything is present");
+        check(!hasInstallable(resolution, "sodium"), "Sodium is not pushed onto a working install");
+        for (String slug : new String[]{"ferrite-core", "lithium", "entityculling",
+                "moreculling", "immediatelyfast", "modernfix"}) {
+            PlanItem item = findItem(resolution, slug);
+            check(item != null && item.state == ItemState.INSTALLED, "Recognised as installed: " + slug);
+        }
+        check(!containsAny(resolution.warnings, "shared game directory"),
+                "No unrelated warning is invented");
+    }
+
+    /**
+     * The per-installation state that drives Restore must record the Krypton installation exactly
+     * like any other, own only its own files, and leave Ultra-Lite's preference untouched.
+     */
+    private static void testStateOwnershipAfterKryptonPlan() {
+        try {
+            stateOwnershipBody();
+        } catch (Exception e) {
+            // The scenarios run inside a Runnable, so checked failures surface as assertions.
+            throw new AssertionError("State fixture failed: " + e, e);
+        }
+    }
+
+    private static void stateOwnershipBody() throws Exception {
+        File root = new File(System.getProperty("java.io.tmpdir"),
+                "uo-krypton-" + System.nanoTime());
+        File gameDirectory = new File(root, "instance");
+        // noinspection ResultOfMethodCallIgnored
+        gameDirectory.mkdirs();
+        try {
+            FakeSource source = fullSource("1.21.11", "fabric", Arrays.asList("fabric"));
+            Environment environment = environment("1.21.11", Loader.FABRIC,
+                    Renderers.NGGL4ES_RENDERER, 21, 8192, false);
+            environment.gameDirectory = gameDirectory.getAbsolutePath();
+            Resolution resolution = UltraOptimizationResolver.resolve(environment, source, null);
+            check(!resolution.installableItems().isEmpty(), "Plan has something to install");
+
+            UltraOptimizationState state = new UltraOptimizationState();
+            state.minecraftVersion = environment.minecraftVersion;
+            state.loader = environment.loader.displayName();
+            state.renderer = environment.renderer;
+            for (PlanItem item : resolution.installableItems()) {
+                UltraOptimizationState.Entry entry = new UltraOptimizationState.Entry();
+                entry.projectId = item.projectId;
+                entry.slug = item.slug;
+                entry.fileName = item.fileName;
+                entry.modsDirectory = "mods";
+                state.entries.add(entry);
+            }
+            check(state.entries.size() == resolution.installableItems().size(),
+                    "State records exactly the planned files");
+            for (UltraOptimizationState.Entry entry : state.entries) {
+                check(!"sodium".equalsIgnoreCase(entry.slug), "State never owns a renderer mod on Krypton");
+            }
+            state.save(gameDirectory);
+            check(UltraOptimizationState.hasState(gameDirectory), "State lives inside the installation");
+
+            UltraOptimizationState reloaded = UltraOptimizationState.load(gameDirectory);
+            check(reloaded != null, "State reloads");
+            check(reloaded.installedCount() == state.entries.size(), "Ownership survives reload");
+            check(Renderers.NGGL4ES_RENDERER.equals(reloaded.renderer),
+                    "The Krypton tag is stored verbatim, not normalised to GL4ES");
+            check(reloaded.findEntryByFileName(state.entries.get(0).fileName) != null,
+                    "Restore can find a file it owns");
+            check(!reloaded.containsProject("sodium"),
+                    "Restore owns nothing it did not install");
+
+            File stray = new File(UltraOptimizationState.directory(gameDirectory), "keep.txt");
+            java.io.Writer strayWriter = new java.io.FileWriter(stray);
+            strayWriter.close();
+            reloaded.delete(gameDirectory);
+            check(!UltraOptimizationState.hasState(gameDirectory), "State file removed on delete");
+            check(stray.isFile(), "An unrelated file in the state directory is kept");
+            check(UltraOptimizationState.directory(gameDirectory).isDirectory(),
+                    "A non-empty state directory is kept");
+            check(!new File(gameDirectory, "performanceProfile").exists(),
+                    "Ultra-Lite preference is not part of the installation state");
+        } finally {
+            UltraOptimizationState.deleteRecursively(root);
+        }
+        check(!root.exists(), "Test cleanup removed its temporary directory");
     }
 
     private static void check(boolean condition, String message) {

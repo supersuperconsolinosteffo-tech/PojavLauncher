@@ -9,13 +9,17 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="$ROOT/build/ultra-optimization-tests"
 PKG="$ROOT/app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/ultraoptimization"
+RENDERER_DEFS="$ROOT/app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/game/renderer/def"
 GSON="$ROOT/app_pojavlauncher/libs/gson-2.8.6.jar"
 TEST="$ROOT/scripts/ultra_optimization_tests/UltraOptimizationResolverTest.java"
 
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
+# The launcher's own renderer tag definitions are compiled along with the feature, so the
+# offline test proves the detector reads the real Renderers constants instead of its own copy.
 CORE=(
+  "$RENDERER_DEFS/Renderers.java"
   "$PKG/UltraOptimizationModels.java"
   "$PKG/UltraOptimizationDetector.java"
   "$PKG/UltraOptimizationMatrix.java"
@@ -23,7 +27,7 @@ CORE=(
   "$PKG/UltraOptimizationState.java"
 )
 
-echo "javac --release 8: ${#CORE[@]} core files + 1 test file"
+echo "javac --release 8: ${#CORE[@]} core files (incl. the launcher renderer tags) + 1 test file"
 javac -Xlint:all \
   --release 8 \
   -cp "$GSON" \
