@@ -608,7 +608,11 @@ jobs:
         if: steps.gate.outputs.enabled == '1'
         shell: bash
         run: |
-          set -uo pipefail
+          set +e
+          # actions/setup-job "shell: bash" implies -e -o pipefail, and a grep that correctly finds
+          # nothing exits 1 - which must not abort the audit. Every verdict is recorded in FAIL
+          # and turned into an exit status explicitly at the end of the step.
+          set -u
           export PATH="$ANDROID_HOME/build-tools/35.0.0:$JAVA_HOME/bin:$PATH"
           FAIL=0
           say() { printf '%s\n' "$1" | tee -a asset-verification.txt; }
@@ -697,6 +701,7 @@ jobs:
               if [ "$n" -ge 1 ]; then ok "$apk contains the marker: $marker"; else bad "$apk is missing: $marker"; fi
             done
             stale=$(cat "$d"/classes*.dex | grep -a -o -F "Krypton Wrapper (OpenGL ES 3.2)" | wc -l | tr -d ' ')
+            stale=${stale:-0}
             if [ "$stale" -eq 0 ]; then
               ok "$apk has no pre-Krypton detector wording, so it is not an older artifact"
             else
@@ -784,7 +789,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          set -uo pipefail
+          set +e   # explicit verdicts below; an absent grep match must not abort
           FAIL=0
           : > public-check.txt
           for name in "$FULL_ASSET" "$NORUNTIME_ASSET"; do
