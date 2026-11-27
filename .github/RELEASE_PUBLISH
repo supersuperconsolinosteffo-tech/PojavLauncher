@@ -1,0 +1,11 @@
+# Presence of this file enables the `publish-artifact` job of
+# .github/workflows/renewed-release.yml, which copies the APKs of an already
+# verified CI run onto the existing release `pojavlauncher-renewed-20261126`.
+#
+# enabled_for_run: 46045859676
+# built_from_commit: 1512463d51436fa36fd78285e54937f85912b670
+# assets_added: PojavLauncher-Renewed-Krypton-Full.apk, PojavLauncher-Renewed-Krypton-Noruntime.apk
+#
+# Remove this file as soon as the assets are live so no later push can republish.
+# The job still refuses to publish unless the uploaded APKs are byte-identical to
+# what that run built and verified, and it never creates a release or deletes an asset.

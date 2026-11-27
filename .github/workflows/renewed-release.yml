@@ -480,3 +480,352 @@ jobs:
           printf -- '-->\n' >> /tmp/body.md
           DIAG_ID=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq .id)
           gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$DIAG_ID" -F body=@/tmp/body.md --jq .html_url
+
+  # ------------------------------------------------------------------------------------------
+  # Publish the APKs that a previous run already built and verified: no rebuild, no new release,
+  # and no existing asset is overwritten or deleted. Runs only while .github/RELEASE_PUBLISH is
+  # committed, so an ordinary push can never republish anything.
+
+  # ------------------------------------------------------------------------------------------
+  # Publish the APKs that a previous run already built and verified: no rebuild, no new release,
+  # and no existing asset is overwritten or deleted. Runs only while .github/RELEASE_PUBLISH is
+  # committed, so an ordinary push can never republish anything.
+  # ------------------------------------------------------------------------------------------
+  publish-artifact:
+    name: Publish the verified Krypton APKs to the existing release
+    if: github.ref_name == 'arena/7535fc36-pojavlauncher'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    permissions:
+      contents: write
+      actions: read
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      RELEASE_TAG: pojavlauncher-renewed-20261126
+      SOURCE_RUN: '46045859676'
+      ARTIFACT_ID: '15223245776'
+      SOURCE_COMMIT: 1512463d51436fa36fd78285e54937f85912b670
+      FULL_ASSET: PojavLauncher-Renewed-Krypton-Full.apk
+      NORUNTIME_ASSET: PojavLauncher-Renewed-Krypton-Noruntime.apk
+    steps:
+      - name: Checkout active branch
+        uses: actions/checkout@v4
+        with:
+          ref: arena/7535fc36-pojavlauncher
+          fetch-depth: 8
+          persist-credentials: false
+
+      - name: Publication gate
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -uo pipefail
+          if [ ! -s .github/RELEASE_PUBLISH ]; then
+            echo "publish=skipped (commit .github/RELEASE_PUBLISH to enable this job)"
+            echo "enabled=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "enabled=1" >> "$GITHUB_OUTPUT"
+          echo "publish=enabled by the committed marker:"
+          head -5 .github/RELEASE_PUBLISH
+          echo "source_run=$SOURCE_RUN artifact=$ARTIFACT_ID commit=$SOURCE_COMMIT"
+          echo "=== the run that built these APKs ==="
+          gh run view "$SOURCE_RUN" --json status,conclusion,headSha,workflowName,event \
+            --jq '{workflowName,event,status,conclusion,headSha}'
+          gh run view "$SOURCE_RUN" --json jobs \
+            --jq '[.jobs[] | {name, conclusion, steps: [.steps[] | {n: .name, c: .conclusion}]}]' \
+            > source-run-jobs.json
+          cat source-run-jobs.json
+
+      - name: Set up JDK 17
+        if: steps.gate.outputs.enabled == '1'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android build-tools for apksigner
+        if: steps.gate.outputs.enabled == '1'
+        id: sdk
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            for candidate in \
+              "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+              "$ANDROID_HOME/cmdline-tools/bin/sdkmanager" \
+              "$ANDROID_HOME/tools/bin/sdkmanager"; do
+              if [ -x "$candidate" ]; then SDKMANAGER="$candidate"; break; fi
+            done
+          fi
+          test -n "$SDKMANAGER" || { echo "sdkmanager not found" >&2; exit 1; }
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install "build-tools;35.0.0" >/dev/null
+          test -x "$ANDROID_HOME/build-tools/35.0.0/apksigner"
+
+      - name: Fetch the APKs exactly as that run built them
+        if: steps.gate.outputs.enabled == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git cat-file -e "$SOURCE_COMMIT^{commit}"
+          if git merge-base --is-ancestor "$SOURCE_COMMIT" HEAD; then
+            echo "source_commit_is_ancestor=yes"
+          else
+            echo "source_commit_is_ancestor=NO - refusing to publish"
+            exit 1
+          fi
+          # Nothing but CI configuration may differ from the commit these APKs came from.
+          if git diff --quiet "$SOURCE_COMMIT" HEAD -- app_pojavlauncher scripts docs; then
+            echo "app_tree_identical_to_source_commit=yes"
+          else
+            echo "app_tree_identical_to_source_commit=NO - refusing to publish"
+            git diff --stat "$SOURCE_COMMIT" HEAD -- app_pojavlauncher scripts docs
+            exit 1
+          fi
+          echo "=== full diff from the build commit (CI configuration only) ==="
+          git diff --name-only "$SOURCE_COMMIT" HEAD
+          curl -sfL -H "Authorization: Bearer $GH_TOKEN" -o /tmp/artifact.zip \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip"
+          ls -l /tmp/artifact.zip
+          unzip -oq /tmp/artifact.zip -d /tmp/in
+          ls -l /tmp/in
+          for f in PojavLauncher-Renewed-Full.apk PojavLauncher-Renewed-Noruntime.apk release-verification.txt apk-metadata.txt; do
+            test -s "/tmp/in/$f" || { echo "the artifact does not contain $f"; exit 1; }
+          done
+          cp /tmp/in/PojavLauncher-Renewed-Full.apk "$FULL_ASSET"
+          cp /tmp/in/PojavLauncher-Renewed-Noruntime.apk "$NORUNTIME_ASSET"
+          cp /tmp/in/apk-metadata.txt apk-metadata-krypton.txt
+          cp /tmp/in/release-verification.txt release-verification-krypton.txt
+          sha256sum "$FULL_ASSET" "$NORUNTIME_ASSET" | tee downloaded-sha256.txt
+
+      - name: Verify integrity, metadata, signing and the Krypton code inside both APKs
+        if: steps.gate.outputs.enabled == '1'
+        shell: bash
+        run: |
+          set -uo pipefail
+          export PATH="$ANDROID_HOME/build-tools/35.0.0:$JAVA_HOME/bin:$PATH"
+          FAIL=0
+          say() { printf '%s\n' "$1" | tee -a asset-verification.txt; }
+          ok() { say "OK    $1"; }
+          bad() { say "FAIL  $1"; FAIL=1; }
+          say "=== provenance ==="
+          say "built_from_commit=$SOURCE_COMMIT"
+          say "built_by_run=https://github.com/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN"
+          say "artifact_id=$ARTIFACT_ID"
+          for apk in "$FULL_ASSET" "$NORUNTIME_ASSET"; do
+            case "$apk" in
+              *Krypton-Full.apk) origin=PojavLauncher-Renewed-Full ;;
+              *) origin=PojavLauncher-Renewed-Noruntime ;;
+            esac
+            say "=== $apk (built as $origin.apk) ==="
+            if unzip -t "$apk" >/dev/null 2>&1; then ok "$apk ZIP integrity (unzip -t)"; else bad "$apk ZIP integrity"; fi
+            size=$(stat -c%s "$apk")
+            sha=$(sha256sum "$apk" | awk '{print $1}')
+            want_size=$(grep "^$origin.size_bytes=" apk-metadata-krypton.txt | cut -d= -f2)
+            want_sha=$(grep "^$origin.sha256=" apk-metadata-krypton.txt | cut -d= -f2)
+            say "$apk size_bytes=$size"
+            say "$apk sha256=$sha"
+            if [ "$size" = "$want_size" ]; then ok "$apk size matches the build-time metadata"; else bad "$apk size $size != build-time $want_size"; fi
+            if [ "$sha" = "$want_sha" ]; then ok "$apk sha256 matches the build-time metadata"; else bad "$apk sha256 != build-time $want_sha"; fi
+            if apksigner verify --verbose --print-certs "$apk" > /tmp/sig.txt 2>&1; then
+              ok "$apk signature verifies with apksigner"
+              sed -n 's/^Verifies: /  verifies: /p;s/^Signer #1 certificate DN: /  signer_dn: /p;s/^Signer #1 certificate SHA-256 digest: /  signer_sha256: /p;s/^Minimum SDK version: /  min_sdk: /p' /tmp/sig.txt | head -8 | tee -a asset-verification.txt
+              recorded=$(grep "^$origin.debug_signer_sha256=" apk-metadata-krypton.txt | cut -d= -f2)
+              live=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' /tmp/sig.txt | head -1)
+              if [ -n "$recorded" ] && [ "$recorded" = "$live" ]; then
+                ok "$apk signer digest matches the build-time record ($live)"
+              else
+                bad "$apk signer digest $live != build-time $recorded"
+              fi
+            else
+              bad "$apk failed apksigner verification"
+              tail -5 /tmp/sig.txt | tee -a asset-verification.txt
+            fi
+            if zipalign -c -v 4 "$apk" >/dev/null 2>&1; then ok "$apk is zipaligned"; else say "NOTE  $apk zipalign check reported a difference"; fi
+            for field in package versionName versionCode minSdk targetSdk abis; do
+              value=$(grep "^$origin.$field=" apk-metadata-krypton.txt | cut -d= -f2)
+              say "$apk build-time $field=${value:-not recorded}"
+            done
+          done
+          say "=== Android verification recorded by the run that built them ==="
+          for token in apksigner_verify zip_integrity abis=; do
+            if grep -q -- "$token" release-verification-krypton.txt; then
+              ok "release-verification-krypton.txt records $token"
+            else
+              bad "release-verification-krypton.txt lacks $token"
+            fi
+          done
+          if grep -q "^source_commit=$SOURCE_COMMIT" release-verification-krypton.txt; then
+            ok "the build log names the commit the APKs were made from ($SOURCE_COMMIT)"
+          else
+            bad "the build log does not name $SOURCE_COMMIT: $(grep '^source_commit=' release-verification-krypton.txt || echo none)"
+          fi
+          for apk in "$FULL_ASSET" "$NORUNTIME_ASSET"; do
+            case "$apk" in
+              *Krypton-Full.apk) origin=PojavLauncher-Renewed-Full ;;
+              *) origin=PojavLauncher-Renewed-Noruntime ;;
+            esac
+            logged=$(awk -v o="$origin" -v f="size_bytes" '$0 ~ "^=== "o".apk" {hit=1;next} hit && /^size_bytes=/ {print substr($0,12); exit}' release-verification-krypton.txt)
+            actual=$(stat -c%s "$apk")
+            if [ -n "$logged" ] && [ "$logged" = "$actual" ]; then
+              ok "$apk size also matches the value the build logged"
+            else
+              bad "$apk size $actual is not the size the build logged ($logged)"
+            fi
+          done
+          say "=== Krypton Wrapper compatibility code inside classes.dex ==="
+          rm -rf /tmp/dex; mkdir -p /tmp/dex
+          for apk in "$FULL_ASSET" "$NORUNTIME_ASSET"; do
+            d=/tmp/dex/"$apk"; mkdir -p "$d"
+            unzip -oq "$apk" 'classes*.dex' -d "$d"
+            for marker in \
+              "Krypton Wrapper (NG-GL4ES, labelled OpenGL ES 3.2) - 26.2 and lower" \
+              "Sodium skipped: Krypton Wrapper (NG-GL4ES) is a GL4ES translation layer" \
+              "Krypton family, desktop OpenGL" \
+              "never as LTW or Zink" \
+              "opengles_nggl4es"
+            do
+              n=$(cat "$d"/classes*.dex | grep -a -o -F "$marker" | wc -l | tr -d ' ')
+              if [ "$n" -ge 1 ]; then ok "$apk contains the marker: $marker"; else bad "$apk is missing: $marker"; fi
+            done
+            stale=$(cat "$d"/classes*.dex | grep -a -o -F "Krypton Wrapper (OpenGL ES 3.2)" | wc -l | tr -d ' ')
+            if [ "$stale" -eq 0 ]; then
+              ok "$apk has no pre-Krypton detector wording, so it is not an older artifact"
+            else
+              bad "$apk still carries the superseded detector wording"
+            fi
+          done
+          say "=== result ==="
+          say "verification_failures=$FAIL"
+          [ "$FAIL" -eq 0 ] || exit 1
+
+      - name: Add both APKs to the existing release, keeping every current asset
+        if: steps.gate.outputs.enabled == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "verification_failures=0" asset-verification.txt || { echo "refusing to publish: verification did not pass" >&2; exit 1; }
+          gh release view "$RELEASE_TAG" --json assets --jq '[.assets[].name][]' > /tmp/before_names.txt
+          echo "=== assets before ==="; cat /tmp/before_names.txt
+          gh release upload "$RELEASE_TAG" "$FULL_ASSET" "$NORUNTIME_ASSET" release-verification-krypton.txt apk-metadata-krypton.txt --clobber
+          gh release view "$RELEASE_TAG" --json assets --jq '[.assets[].name][]' > /tmp/after_names.txt
+          echo "=== assets after ==="; cat /tmp/after_names.txt
+          while IFS= read -r name; do
+            [ -n "$name" ] || continue
+            grep -qxF "$name" /tmp/after_names.txt || { echo "existing asset vanished: $name" >&2; exit 1; }
+          done < /tmp/before_names.txt
+          for required in "$FULL_ASSET" "$NORUNTIME_ASSET"; do
+            grep -qxF "$required" /tmp/after_names.txt || { echo "required asset missing: $required" >&2; exit 1; }
+          done
+          echo "existing_assets_preserved=yes"
+          for pair in "$FULL_ASSET=PojavLauncher-Renewed-Full" "$NORUNTIME_ASSET=PojavLauncher-Renewed-Noruntime"; do
+            required=${pair%%=*}; origin=${pair##*=}
+            want=$(grep "^$origin.sha256=" apk-metadata-krypton.txt | cut -d= -f2)
+            got=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" \
+              --jq ".assets[] | select(.name == \"$required\") | .digest")
+            echo "digest_check $required github=$got built=sha256:$want"
+            [ "$got" = "sha256:$want" ] || { echo "GitHub's stored digest for $required differs from the built APK" >&2; exit 1; }
+          done
+          echo "digest_match_with_built_apks=yes"
+
+      - name: Confirm both APKs are downloadable without authentication
+        if: steps.gate.outputs.enabled == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -uo pipefail
+          FAIL=0
+          : > public-check.txt
+          for name in "$FULL_ASSET" "$NORUNTIME_ASSET"; do
+            url="https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/$name"
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$url")
+            echo "anonymous HEAD for $name -> http=$code"
+            case "$code" in 302|200) : ;; *) echo "the public link did not resolve"; FAIL=1 ;; esac
+            if curl -sfL -o "/tmp/$name" "$url"; then
+              got=$(sha256sum "/tmp/$name" | awk '{print $1}')
+              size=$(stat -c%s "/tmp/$name")
+              want=$(sha256sum "$name" | awk '{print $1}')
+              want_size=$(stat -c%s "$name")
+              if [ "$got" = "$want" ] && [ "$size" = "$want_size" ]; then
+                echo "PUBLIC_OK $name size=$size sha256=$got url=$url" | tee -a public-check.txt
+              else
+                echo "PUBLIC_MISMATCH $name got=$got/$size want=$want/$want_size" | tee -a public-check.txt
+                FAIL=1
+              fi
+            else
+              echo "PUBLIC_FAIL $name could not be downloaded anonymously" | tee -a public-check.txt
+              FAIL=1
+            fi
+          done
+          echo "=== release state reported by GitHub ==="
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" \
+            --jq '{tag:.tag_name,prerelease,target:.target_commitish,assets:[.assets[]|{name,size,state,contentType,digest,browser_download_url}]}'
+          [ "$FAIL" -eq 0 ] || exit 1
+
+      - name: Record the evidence in the release notes
+        if: steps.gate.outputs.enabled == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_ID=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq .id)
+          test -n "$RELEASE_ID" || { echo "cannot resolve the release id" >&2; exit 1; }
+          gh release view "$RELEASE_TAG" --json body --jq .body > /tmp/body.md
+          awk 'index($0, "krypton-assets-evidence"){exit} {print}' /tmp/body.md > /tmp/body.base.md
+          {
+            echo
+            echo '<!-- krypton-assets-evidence -->'
+            echo '### Krypton Wrapper (NG-GL4ES) build - assets and verification'
+            echo
+            echo 'Ultra-Optimization now classifies **Krypton Wrapper (NG-GL4ES)** as its own renderer family'
+            echo '(`opengles_nggl4es`, `libng_gl4es.so`, desktop OpenGL 3.1 pinned over OpenGL ES 3): the'
+            echo 'wrapper is recognized and optimized, and renderer-dependent mods such as Sodium are'
+            echo 'withheld with an explicit reason instead of the installation being refused.'
+            echo
+            echo "- Built and verified by [run $SOURCE_RUN](https://github.com/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN)"
+            echo "  from commit \`$SOURCE_COMMIT\`. The uploaded bytes are that run's CI artifact"
+            echo "  \`$ARTIFACT_ID\`, not a rebuild; the upload commit differs only in CI configuration."
+            echo "- Added as new assets. Every asset already on this release is preserved untouched."
+            echo
+            for name in "$FULL_ASSET" "$NORUNTIME_ASSET" release-verification-krypton.txt apk-metadata-krypton.txt; do
+              printf '* [`%s`](https://github.com/%s/releases/download/%s/%s) - %s bytes, SHA-256 `%s`\n' \
+                "$name" "$GITHUB_REPOSITORY" "$RELEASE_TAG" "$name" \
+                "$(stat -c%s "$name")" "$(sha256sum "$name" | awk '{print $1}')"
+            done
+            echo
+            echo 'Both APKs were fetched again over their public links with no credentials and matched the'
+            echo 'built files byte for byte. Automated verification:'
+            echo
+            echo '<details><summary>verification log</summary>'
+            echo
+            echo '```'
+            cat asset-verification.txt
+            cat public-check.txt
+            echo '```'
+            echo
+            echo '</details>'
+          } > /tmp/section.md
+          cat /tmp/body.base.md /tmp/section.md > /tmp/body.new.md
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -F body=@/tmp/body.new.md \
+            --jq '{tag_name, name, target_commitish, prerelease, html_url}'
+          echo "=== final release state ==="
+          gh release view "$RELEASE_TAG" --json url,tagName,isPrerelease,targetCommitish,assets \
+            --jq '{url,tagName,isPrerelease,targetCommitish,assets:[.assets[]|{name,size,state,digest}]}'
+          echo "=== the previous APK release must still be intact ==="
+          gh release view pojavlauncher-debug-apks-20261126 --json url,tagName,assets \
+            --jq '{url,tagName,assets:[.assets[].name]}'
+
+      - name: Report a disabled run
+        if: steps.gate.outputs.enabled != '1'
+        shell: bash
+        run: echo "publish job skipped; the release was not touched"
