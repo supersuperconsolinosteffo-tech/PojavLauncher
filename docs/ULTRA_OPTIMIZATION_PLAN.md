@@ -213,6 +213,22 @@ and Cloth Config installed. This is consistent with the policy above - all of th
 non-renderer mods, and Fabric API / Cloth Config arrive as required dependencies rather than as
 candidates. It does not establish anything about Sodium, and it is not a benchmark.
 
+**Known nuances, stated rather than engineered around:**
+
+- The scan reads the *configured* renderer (`Instance.getLaunchRenderer()`), which is what
+  `GameRenderer` is constructed from. If the wrapper's native setup fails at launch,
+  `GameRenderer.maybeSetupRenderer()` falls back to plain GL4ES; the resolver then still describes
+  the installation as Krypton. That mismatch is benign here: both renderers get the same treatment
+  for renderer-dependent mods (withheld) and the same treatment for everything else (eligible),
+  so no mod decision changes. No launch-time probing or GL context creation is performed to
+  resolve it - that would mean starting the game.
+- A version JSON may set `disableRendererChecks`, which turns off `GameRunner`'s renderer blocks
+  for that installation. Ultra-Optimization deliberately does not follow that flag: it never
+  installs based on "the launcher would not complain", so the LTW-only Sodium rule stands regardless.
+- The wrapper is labelled "26.2 and lower" in the launcher's own settings string. That ceiling
+  belongs to the renderer, not to mod selection, so Ultra-Optimization neither enforces it nor
+  ignores it silently: it is surfaced in the renderer display name.
+
 Note that the 2048 MB allocation yields the two-mod budget tier, so the *first* run on that device
 offers the two highest-scoring mods rather than all seven; raising the count is a deliberate,
 separate policy decision and is not part of renderer support.
