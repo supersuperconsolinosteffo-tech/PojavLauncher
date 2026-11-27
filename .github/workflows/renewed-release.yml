@@ -357,31 +357,68 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          set -euo pipefail
-          ASSETS=(
-            PojavLauncher-Renewed-Full.apk
-            PojavLauncher-Renewed-Noruntime.apk
-            release-verification.txt
-            apk-metadata.txt
-          )
+          set -uo pipefail
+          DIAG=/tmp/publish-diagnostics.txt
+          : > "$DIAG"
+          PUBLISH_FAILED=0
+          note() { printf '%s\n' "$1" | tee -a "$DIAG"; }
+          run_step() {
+            label="$1"; shift
+            if "$@" >>"$DIAG" 2>&1; then
+              note "OK   $label"
+            else
+              code=$?
+              note "FAIL $label (exit $code)"
+              sed -e 's/^/     | /' "$DIAG" | tail -n 25
+              PUBLISH_FAILED=1
+            fi
+          }
+          ASSETS=()
+          for candidate in PojavLauncher-Renewed-Full.apk PojavLauncher-Renewed-Noruntime.apk release-verification.txt apk-metadata.txt; do
+            if [ -s "$candidate" ]; then ASSETS+=("$candidate"); else note "WARN missing asset $candidate"; fi
+          done
+          note "assets=${ASSETS[*]}"
+          note "tag=$RELEASE_TAG sha=$GITHUB_SHA repo=$GITHUB_REPOSITORY"
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "Release $RELEASE_TAG already exists; replacing its assets, notes and target commit"
-            gh release upload "$RELEASE_TAG" "${ASSETS[@]}" --clobber
-            gh release edit "$RELEASE_TAG" --title "$RELEASE_TITLE" --notes-file release-notes.md
-            RELEASE_ID=$(gh release view "$RELEASE_TAG" --json id --jq .id)
-            gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
-              -f target_commitish="$GITHUB_SHA" --jq '{target_commitish,tag_name}'
+            note "release exists"
+            run_step "upload-assets" gh release upload "$RELEASE_TAG" "${ASSETS[@]}" --clobber
+            run_step "refresh-notes" gh release edit "$RELEASE_TAG" --title "$RELEASE_TITLE" --notes-file release-notes.md
+            RELEASE_ID=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq .id 2>>"$DIAG")
+            note "release_id=$RELEASE_ID"
+            if [ -n "$RELEASE_ID" ]; then
+              run_step "refresh-target" gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -f target_commitish="$GITHUB_SHA" --jq .tag_name
+            else
+              note "FAIL refresh-target (no release id)"
+              PUBLISH_FAILED=1
+            fi
           else
-            echo "Creating release $RELEASE_TAG from $GITHUB_SHA"
-            gh release create "$RELEASE_TAG" "${ASSETS[@]}" \
-              --target "$GITHUB_SHA" \
-              --title "$RELEASE_TITLE" \
-              --notes-file release-notes.md \
-              --prerelease
+            note "creating release"
+            run_step "create-release" gh release create "$RELEASE_TAG" "${ASSETS[@]}" \
+              --target "$GITHUB_SHA" --title "$RELEASE_TITLE" --notes-file release-notes.md --prerelease
           fi
-          echo "=== published release ==="
-          gh release view "$RELEASE_TAG" --json url,tagName,name,isPrerelease,targetCommitish,assets \
-            --jq '{url,tagName,name,isPrerelease,assets:[.assets[]|{name,size,digest}]}'
-          echo "=== previous release must still exist ==="
-          gh release view pojavlauncher-debug-apks-20261126 --json url,tagName,assets \
-            --jq '{url,tagName,assets:[.assets[].name]}'
+          run_step "show-release" gh release view "$RELEASE_TAG" --json url,tagName,name,isPrerelease,targetCommitish,assets --jq '{url,tagName,name,isPrerelease,targetCommitish,assets:[.assets[]|{name,size,digest}]}'
+          note "previous-release-check"
+          run_step "show-previous" gh release view pojavlauncher-debug-apks-20261126 --json url,tagName --jq '{url,tagName}'
+          note "result=$([ "$PUBLISH_FAILED" -eq 0 ] && echo ok || echo failed)"
+          exit "$PUBLISH_FAILED"
+
+      - name: Expose publishing diagnostics on the release
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -uo pipefail
+          DIAG=/tmp/publish-diagnostics.txt
+          test -s "$DIAG" || { echo "no diagnostics to publish"; exit 0; }
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "release $RELEASE_TAG does not exist; printing diagnostics instead"
+            cat "$DIAG"
+            exit 1
+          fi
+          gh release view "$RELEASE_TAG" --json body --jq .body > /tmp/body.md
+          printf '\n<!-- publish-diagnostics (machine readable, not rendered)\n' >> /tmp/body.md
+          sed -e 's/-->/_/g' "$DIAG" >> /tmp/body.md
+          printf -- '-->\n' >> /tmp/body.md
+          DIAG_ID=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq .id)
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$DIAG_ID" -F body=@/tmp/body.md --jq .html_url
