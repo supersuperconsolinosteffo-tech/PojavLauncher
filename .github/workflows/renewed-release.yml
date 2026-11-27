@@ -1,8 +1,12 @@
 name: PojavLauncher Renewed release
 
 # Verification and publication pipeline for the Ultra-Optimization feature branch.
-# It publishes a NEW release (tag pojavlauncher-renewed-<date>) with its own asset names and
-# never touches the previous pojavlauncher-debug-apks-20261126 release.
+#
+# A push runs the full verification and builds both debug APK variants, but does NOT publish
+# anything: repository pushes must never create a release on their own. Publishing the NEW
+# release (tag pojavlauncher-renewed-<date>, its own asset names, never touching the previous
+# pojavlauncher-debug-apks-20261126 release) is an explicit opt-in: run this workflow manually
+# with the "publish" input checked.
 
 on:
   push:
@@ -11,6 +15,13 @@ on:
     paths-ignore:
       - 'docs/**'
       - '*.md'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Create or update the PojavLauncher Renewed GitHub Release with the built APKs'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
@@ -352,7 +363,24 @@ jobs:
           } > release-notes.md
           cat release-notes.md
 
+      - name: Publication gate
+        id: gate
+        shell: bash
+        run: |
+          set -uo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] \
+             && [ "${{ github.event.inputs.publish }}" = "true" ]; then
+            echo "publication=enabled (explicit workflow_dispatch with the publish input)"
+            echo "enabled=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "publication=skipped: the '${{ github.event_name }}' event only verifies and"
+            echo "  builds both debug APKs. Run the workflow manually with the 'publish' input"
+            echo "  checked to create or update the GitHub Release."
+            echo "enabled=0" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish the new GitHub Release
+        if: steps.gate.outputs.enabled == '1'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -403,7 +431,7 @@ jobs:
           exit "$PUBLISH_FAILED"
 
       - name: Expose publishing diagnostics on the release
-        if: always()
+        if: always() && steps.gate.outputs.enabled == '1'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash

@@ -148,7 +148,9 @@ New package: `net.kdt.pojavlaunch.ultraoptimization`.
   proven JDK 17 / Gradle 8.14.5 / official SDK setup.
 - Verify ZIP integrity, `aapt dump badging`, `apksigner verify`, `zipalign -c -v 4`,
   sizes, SHA-256, ABIs, and package metadata.
-- Publish only verified assets in a new unique tag and **PojavLauncher Renewed** release:
+- Publish only verified assets in a new unique tag and **PojavLauncher Renewed** release
+  (a `push` run only verifies and builds; publication is an explicit `workflow_dispatch`
+  with the `publish` input, so no branch push can create a release by accident):
   `PojavLauncher-Renewed-Full.apk`, `PojavLauncher-Renewed-Noruntime.apk`, a verification
   text asset, and release notes with limitations, checksums, build information, supported
   scenarios, and upgrade instructions.
@@ -156,3 +158,61 @@ New package: `net.kdt.pojavlaunch.ultraoptimization`.
 
 Physical-device installation, live Modrinth API behavior, and in-game performance remain
 user-side validation and will be explicitly reported as untested by the agent.
+
+
+## 7. Krypton Wrapper (NG-GL4ES)
+
+**Audit question:** can Ultra-Optimization tell Krypton apart from plain GL4ES, and what may it
+offer on Krypton?
+
+**Renderer identification, from the launcher source (not from naming):**
+
+| Fact | Evidence |
+| --- | --- |
+| Krypton has its own tag, `opengles_nggl4es`, distinct from GL4ES `opengles2` | `game/renderer/def/Renderers.java` (`NGGL4ES_RENDERER` / `GL4ES_RENDERER`) |
+| It has its own spec class and native library | `game/renderer/impl/GLESRenderSpec.java` -> `NGGL4ESRenderSpec`, `library()` = `libng_gl4es.so` |
+| It is a *sibling* of the GL4ES spec, not a subclass | `NGGL4ESRenderSpec extends GLESRenderSpec`, like `GL4ESRenderSpec` |
+| It pins desktop OpenGL **3.1** over OpenGL ES 3 | its `setupEnvironment` sets `LIBGL_GL=31`, `LIBGL_ES=3`, `LIBGL_NORMALIZE=1`, `LIBGL_USE_MC_COLOR=1`, `LIBGL_NOERROR=1` |
+| It does not inherit the base GLES environment setup | its `setupEnvironment` does not call `super`, so no `GLESProvider`/ANGLE selection, no `allow_higher_compat_version`, no shader-dump flag |
+| The launcher's Sodium guard does **not** cover it | `utils/jre/GameRunner.java` tests `renderer instanceof GLESRenderSpec.GL4ESRenderSpec` before blocking Sodium / switching to LTW; the same `instanceof` gates the "1.21.5+ is not GL4ES-compatible" switch |
+| The launcher's settings list persists exactly this tag | `RendererCache.getCompatibleRenderers` feeds `ListPreference.setEntryValues(list.rendererIds)`; `Instance.getLaunchRenderer()` returns that value |
+| Two legacy aliases mean plain GL4ES | `GameRenderer.getKnownRenderer` maps `opengles2_4` and `opengles2_5` onto `GL4ESRenderSpec` |
+
+So Krypton **is** reliably distinguishable, and no invented detection mechanism is needed: the
+per-installation renderer tag is the authority.
+
+**Capability classification** (`UltraOptimizationDetector.describe`) is expressed over the
+launcher's own `Renderers` constants and records, per family: the OpenGL ES major the spec asks
+MojoExec to set up, the desktop OpenGL version the spec pins (if any), whether `GameRunner`
+guards Sodium for it, and whether this build has a validated Sodium path. LTW is `esMajor=3`
+with a validated Sodium path; GL4ES is `esMajor=2`, desktop GL 2.1, launcher-guarded; Krypton is
+`esMajor=3`, desktop GL **3.1**, **not** launcher-guarded and **not** validated; Zink pins
+`MESA_GL_VERSION_OVERRIDE=4.6` (legacy Zink 4.3) and is also not validated here. An unrecognised
+tag stays unidentifiable and is never reported as Krypton, never as GL4ES either.
+
+**Selection policy on Krypton:**
+
+- Sodium is withheld. The wrapper advertises desktop OpenGL 3.1, which is below the core-profile
+  path Sodium's rendering backend uses, and neither this repository nor the launcher's own checks
+  establish the combination. "Neither guarded nor validated" is treated as unvalidated, not as
+  permitted. Skipping is reported with the reason and the advertised version, on the mod row and
+  in the notes.
+- No other mod is affected: Sodium is the only renderer-gated candidate, asserted by the offline
+  suite, so FerriteCore, Lithium, ModernFix, ImmediatelyFast, Entity Culling, More Culling and
+  Memory Leak Fix stay subject only to the usual Modrinth/version/loader/dependency/budget rules.
+- Krypton never causes a refusal. Renderer-dependent capability is a per-mod decision; the
+  installation is still resolved, and an installation that already contains the mods resolves to
+  a no-op rather than an error.
+- The renderer is read, never written. Krypton is not "promoted" to LTW/Zink, and the GL4ES
+  version cutoff is deliberately not applied to it, because `GameRunner` does not apply it either.
+
+**Reported device evidence (user-provided, not measured here):** an Android phone running
+Minecraft 1.21.11 on Fabric with Java 21, Krypton Wrapper and 2048 MB allocated, reaching the
+main menu with FerriteCore, Lithium, Entity Culling, ImmediatelyFast, More Culling, Fabric API
+and Cloth Config installed. This is consistent with the policy above - all of those are
+non-renderer mods, and Fabric API / Cloth Config arrive as required dependencies rather than as
+candidates. It does not establish anything about Sodium, and it is not a benchmark.
+
+Note that the 2048 MB allocation yields the two-mod budget tier, so the *first* run on that device
+offers the two highest-scoring mods rather than all seven; raising the count is a deliberate,
+separate policy decision and is not part of renderer support.
